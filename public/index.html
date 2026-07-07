@@ -412,7 +412,7 @@ function showTab(id) {
   const body = document.getElementById('tabContent');
   if(id==='preview') {
     body.innerHTML = `<div class="toolbar"><span>Preview em tempo real</span><button class="btn-copy" onclick="renderPreview()">↻ Refresh</button></div>
-      <canvas id="previewCanvas" width="512" height="512" style="width:100%;max-width:100%;aspect-ratio:1;border-radius:8px;border:1px solid var(--border);image-rendering:auto"></canvas>
+      <canvas id="previewCanvas" width="512" height="512"></canvas>
       <div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
     setTimeout(renderPreview, 50);
   } else if(id==='lua') {
