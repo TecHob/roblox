@@ -146,16 +146,6 @@ function handleGetPresets(): void
         "SELECT id, slug, name, icon, description, is_system, is_public, use_count, 
                 config_json, thumbnail, created_at 
          FROM presets 
-         WHERE is_public = 1 OR session_id = ?
-         ORDER BY is_system DESC, use_count DESC",
-        // presets do sistema não têm session_id, então usamos OR
-    );
-
-    // Fallback sem session_id na query (presets são públicos)
-    $presets = Database::fetchAll(
-        "SELECT id, slug, name, icon, description, is_system, is_public, use_count, 
-                config_json, thumbnail, created_at 
-         FROM presets 
          WHERE is_public = 1
          ORDER BY is_system DESC, use_count DESC"
     );
