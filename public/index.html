@@ -64,9 +64,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg); }
 .tab-body { flex: 1; overflow: auto; padding: 16px; }
 
-canvas#preview { width: 100%; max-width: 500px; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--border); image-rendering: pixelated; }
+canvas#preview { width: 100%; max-width: 100%; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--border); image-rendering: pixelated; display: block; }
 
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
 .toolbar span { font-size: 13px; color: var(--text2); }
 .btn-copy { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; }
 .btn-copy:hover { border-color: var(--accent); }
@@ -90,9 +90,50 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
 .db-status.ok { background: #0d2818; color: var(--green2); }
 .db-status.err { background: #2d1215; color: var(--red); }
 
+/* ═══ RESPONSIVO ═══ */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .sidebar { width: 280px; }
+}
+
+/* Mobile */
 @media (max-width: 768px) {
-  .main { flex-direction: column; }
-  .sidebar { width: 100%; max-height: 50vh; }
+  .header { padding: 10px 14px; flex-wrap: wrap; gap: 6px; }
+  .logo { font-size: 16px; }
+  .version { display: none; }
+
+  .main { flex-direction: column; height: auto; min-height: calc(100vh - 49px); }
+
+  .sidebar {
+    width: 100%; max-height: none; height: auto;
+    border-right: none; border-bottom: 1px solid var(--border);
+    order: 2;
+  }
+
+  .content { order: 1; min-height: 50vh; }
+
+  .tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 10px 14px; font-size: 12px; flex-shrink: 0; }
+  .tab-body { padding: 12px; }
+
+  pre.code { font-size: 10px; padding: 10px; max-height: 60vh; }
+
+  .presets { gap: 6px; }
+  .preset-btn { padding: 8px 12px; font-size: 13px; }
+
+  .stats { justify-content: center; }
+
+  .btn-generate { padding: 14px; font-size: 15px; }
+}
+
+/* Mobile pequeno */
+@media (max-width: 420px) {
+  .header { padding: 8px 10px; }
+  .logo { font-size: 14px; }
+  .sidebar { padding: 10px; }
+  .section-title { font-size: 10px; }
+  .tab { padding: 8px 10px; font-size: 11px; }
 }
 </style>
 </head>
@@ -186,7 +227,7 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
 <script>
 // ═══ API URL ═══
 // ═══ API URL ═══
-const API = 'https://precisao.agr.br/apis/';
+const API = 'https://precisao.agr.br/apis/roblox/mapa/';
 
 // ═══ Estado ═══
 let config = {
@@ -371,7 +412,7 @@ function showTab(id) {
   const body = document.getElementById('tabContent');
   if(id==='preview') {
     body.innerHTML = `<div class="toolbar"><span>Preview em tempo real</span><button class="btn-copy" onclick="renderPreview()">↻ Refresh</button></div>
-      <canvas id="previewCanvas" width="400" height="400" style="width:100%;max-width:500px;aspect-ratio:1;border-radius:8px;border:1px solid var(--border);image-rendering:pixelated"></canvas>
+      <canvas id="previewCanvas" width="512" height="512" style="width:100%;max-width:100%;aspect-ratio:1;border-radius:8px;border:1px solid var(--border);image-rendering:auto"></canvas>
       <div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
     setTimeout(renderPreview, 50);
   } else if(id==='lua') {
