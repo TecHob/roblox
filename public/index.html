@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roblox Map Architect</title>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --border: #30363d;
+  --text: #c9d1d9; --text2: #8b949e; --text3: #484f58;
+  --accent: #58a6ff; --green: #238636; --green2: #3fb950;
+  --red: #f85149; --orange: #f0883e;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+
+.header { background: linear-gradient(135deg, var(--bg2), #1a2332); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+.logo { font-size: 20px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--green2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.version { font-size: 11px; color: var(--text3); margin-left: auto; }
+
+.main { display: flex; height: calc(100vh - 49px); }
+
+/* Sidebar */
+.sidebar { width: 320px; background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 14px; flex-shrink: 0; }
+.section { margin-bottom: 16px; }
+.section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text2); margin-bottom: 8px; }
+.label { font-size: 12px; color: var(--text2); margin-bottom: 4px; display: block; }
+
+input[type="number"], input[type="text"], select {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; color: var(--text); font-size: 13px;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.preset-btn { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text2); cursor: pointer; font-size: 12px; transition: all 0.15s; }
+.preset-btn.active, .preset-btn:hover { border-color: var(--accent); color: var(--accent); background: #1a2744; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+.toggle { width: 36px; height: 20px; border-radius: 10px; background: var(--border); cursor: pointer; position: relative; border: none; transition: background 0.2s; }
+.toggle.on { background: var(--green); }
+.toggle::after { content: ''; width: 16px; height: 16px; border-radius: 8px; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+.toggle.on::after { left: 18px; }
+
+.seed-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.seed-row input { flex: 1; }
+.btn-dice { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); cursor: pointer; font-size: 14px; }
+
+.btn-generate { width: 100%; padding: 12px; border-radius: 8px; border: none; background: linear-gradient(135deg, var(--green), #2ea043); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; transition: transform 0.1s; }
+.btn-generate:hover { transform: scale(1.02); }
+.btn-generate:disabled { background: var(--bg2); color: var(--text3); transform: none; cursor: default; }
+
+.progress { width: 100%; height: 6px; background: var(--bg2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--green2)); border-radius: 3px; transition: width 0.15s; }
+
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 11px; }
+.stat-val { color: var(--accent); font-weight: 700; font-size: 14px; display: block; }
+
+/* Content */
+.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg2); }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg); }
+.tab-body { flex: 1; overflow: auto; padding: 16px; }
+
+canvas#preview { width: 100%; max-width: 500px; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--border); image-rendering: pixelated; }
+
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.toolbar span { font-size: 13px; color: var(--text2); }
+.btn-copy { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg2); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; }
+.btn-copy:hover { border-color: var(--accent); }
+
+pre.code { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 11px; font-family: 'Cascadia Code', 'Fira Code', monospace; color: var(--text); overflow: auto; white-space: pre; max-height: calc(100vh - 160px); line-height: 1.5; }
+
+.empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+.legend { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text2); }
+.legend-color { width: 10px; height: 10px; border-radius: 2px; }
+
+/* Maps list */
+.map-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; }
+.map-card:hover { border-color: var(--accent); }
+.map-card h4 { font-size: 14px; margin-bottom: 4px; }
+.map-card .meta { font-size: 11px; color: var(--text2); }
+
+.db-status { font-size: 11px; padding: 4px 8px; border-radius: 4px; }
+.db-status.ok { background: #0d2818; color: var(--green2); }
+.db-status.err { background: #2d1215; color: var(--red); }
+
+@media (max-width: 768px) {
+  .main { flex-direction: column; }
+  .sidebar { width: 100%; max-height: 50vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="logo">ROBLOX MAP ARCHITECT</span>
+  <span class="db-status" id="dbStatus">⏳ Verificando BD...</span>
+  <span class="version">v1.0 — PHP Backend</span>
+</div>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="section">
+      <div class="section-title">Preset do Mapa</div>
+      <div class="presets" id="presetBtns"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Tamanho</div>
+      <select id="cfgSize" onchange="updateConfig('size', this.value)">
+        <option value="tiny">Tiny — 256×256 studs</option>
+        <option value="small">Small — 512×512 studs</option>
+        <option value="medium" selected>Medium — 1024×1024 studs</option>
+        <option value="large">Large — 2048×2048 studs</option>
+        <option value="epic">Epic — 4096×4096 studs</option>
+      </select>
+      <div class="stats" id="sizeStats"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Terreno</div>
+      <label class="label">Seed</label>
+      <div class="seed-row">
+        <input type="number" id="cfgSeed" value="42" onchange="updateConfig('seed', +this.value); renderPreview()">
+        <button class="btn-dice" onclick="randomSeed()">🎲</button>
+      </div>
+      <label class="label" id="lblAmplitude">Amplitude: 0.70</label>
+      <input type="range" id="cfgAmplitude" min="0.1" max="1" step="0.05" value="0.7" oninput="updateSlider('amplitude', this)">
+      <label class="label" id="lblWaterLevel">Nível d'água: 30%</label>
+      <input type="range" id="cfgWaterLevel" min="0" max="0.6" step="0.02" value="0.3" oninput="updateSlider('waterLevel', this)">
+      <label class="label" id="lblOctaves">Octaves: 6</label>
+      <input type="range" id="cfgOctaves" min="1" max="8" step="1" value="6" oninput="updateSlider('octaves', this)">
+      <label class="label" id="lblScale">Escala: 0.008</label>
+      <input type="range" id="cfgScale" min="0.002" max="0.02" step="0.001" value="0.008" oninput="updateSlider('scale', this)">
+    </div>
+
+    <div class="section">
+      <div class="section-title">Montanhas</div>
+      <label class="label" id="lblMountainThreshold">Limiar: 0.60</label>
+      <input type="range" id="cfgMountainThreshold" min="0.3" max="0.9" step="0.05" value="0.6" oninput="updateSlider('mountainThreshold', this)">
+      <label class="label" id="lblMountainAmplitude">Amplitude: 0.40</label>
+      <input type="range" id="cfgMountainAmplitude" min="0.1" max="1" step="0.05" value="0.4" oninput="updateSlider('mountainAmplitude', this)">
+    </div>
+
+    <div class="section">
+      <div class="section-title">Features</div>
+      <div class="toggle-row"><span>🏝️ Modo Ilha</span><button class="toggle on" id="togIslandMode" onclick="toggleFeature('islandMode', this)"></button></div>
+      <div class="toggle-row"><span>🌊 Rios</span><button class="toggle on" id="togRivers" onclick="toggleFeature('rivers', this)"></button></div>
+      <div class="toggle-row"><span>🕳️ Cavernas</span><button class="toggle" id="togCavesEnabled" onclick="toggleFeature('cavesEnabled', this)"></button></div>
+      <div class="toggle-row"><span>🌋 Vulcão</span><button class="toggle" id="togVolcano" onclick="toggleFeature('volcano', this)"></button></div>
+      <div class="toggle-row"><span>🌳 Árvores</span><button class="toggle on" id="togPlaceTrees" onclick="toggleFeature('placeTrees', this)"></button></div>
+      <div class="toggle-row"><span>🪨 Pedras</span><button class="toggle on" id="togPlaceRocks" onclick="toggleFeature('placeRocks', this)"></button></div>
+    </div>
+
+    <div class="section">
+      <label class="label">Nome do mapa</label>
+      <input type="text" id="mapName" placeholder="Meu Mapa Incrível">
+    </div>
+
+    <button class="btn-generate" id="btnGenerate" onclick="generateMap()">⚡ GERAR MAPA</button>
+    <div class="progress" id="progressBar" style="display:none"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('preview', this)">🗺️ Preview</div>
+      <div class="tab" onclick="switchTab('lua', this)">📜 Lua Script</div>
+      <div class="tab" onclick="switchTab('json', this)">📦 Config JSON</div>
+      <div class="tab" onclick="switchTab('history', this)">📋 Histórico</div>
+    </div>
+
+    <div class="tab-body" id="tabContent">
+      <!-- Preenchido por JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ API URL ═══
+// ═══ API URL ═══
+const API = 'https://precisao.agr.br/apis/';
+
+// ═══ Estado ═══
+let config = {
+  preset: 'tropical', size: 'medium', seed: 42, scale: 0.008, octaves: 6,
+  lacunarity: 2.0, gain: 0.5, waterLevel: 0.3, amplitude: 0.7,
+  mountainThreshold: 0.6, mountainAmplitude: 0.4, cavesEnabled: false,
+  caveThreshold: 0.65, rivers: true, volcano: false, islandMode: true,
+  placeTrees: true, treeDensity: 0.02, placeRocks: true, rockDensity: 0.005,
+  lighting: 'tropical',
+};
+
+let generatedLua = '';
+let generatedJSON = '';
+let currentTab = 'preview';
+
+const PRESETS = {
+  tropical: { name:'🏝️ Tropical', waterLevel:0.3, amplitude:0.7, rivers:true, cavesEnabled:false, volcano:false, islandMode:true },
+  medieval: { name:'🏰 Medieval', waterLevel:0.25, amplitude:0.6, rivers:true, cavesEnabled:true, volcano:false, islandMode:false },
+  volcanic: { name:'🌋 Vulcânico', waterLevel:0.1, amplitude:0.9, rivers:false, cavesEnabled:true, volcano:true, islandMode:true },
+  arctic:   { name:'❄️ Ártico', waterLevel:0.2, amplitude:0.65, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
+  desert:   { name:'🏜️ Deserto', waterLevel:0.08, amplitude:0.4, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
+  skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true },
+  custom:   { name:'⚙️ Custom' },
+};
+
+const SIZES = { tiny:[64,256], small:[128,512], medium:[256,1024], large:[512,2048], epic:[1024,4096] };
+
+// ═══ Perlin Noise ═══
+class Perlin {
+  constructor(seed=42) {
+    this.p = new Uint8Array(512);
+    const pm = new Uint8Array(256);
+    for(let i=0;i<256;i++) pm[i]=i;
+    let s=seed;
+    for(let i=255;i>0;i--){ s=(s*16807)%2147483647; const j=s%(i+1); [pm[i],pm[j]]=[pm[j],pm[i]]; }
+    for(let i=0;i<512;i++) this.p[i]=pm[i&255];
+  }
+  fade(t){return t*t*t*(t*(t*6-15)+10)}
+  lerp(a,b,t){return a+t*(b-a)}
+  grad(h,x,y){const g=h&3,u=g<2?x:y,v=g<2?y:x;return((g&1)?-u:u)+((g&2)?-v:v)}
+  noise(x,y){
+    const X=Math.floor(x)&255,Y=Math.floor(y)&255,xf=x-Math.floor(x),yf=y-Math.floor(y);
+    const u=this.fade(xf),v=this.fade(yf),p=this.p,a=p[X]+Y,b=p[X+1]+Y;
+    return this.lerp(this.lerp(this.grad(p[a],xf,yf),this.grad(p[b],xf-1,yf),u),
+      this.lerp(this.grad(p[a+1],xf,yf-1),this.grad(p[b+1],xf-1,yf-1),u),v);
+  }
+  fbm(x,y,oct=6,lac=2,gain=0.5){
+    let t=0,a=1,f=1,m=0;
+    for(let i=0;i<oct;i++){t+=this.noise(x*f,y*f)*a;m+=a;a*=gain;f*=lac;}
+    return t/m;
+  }
+  ridged(x,y,oct=4,lac=2,gain=0.5){
+    let t=0,a=1,f=1,m=0;
+    for(let i=0;i<oct;i++){let n=this.noise(x*f,y*f);n=1-Math.abs(n*2);n*=n;t+=n*a;m+=a;a*=gain;f*=lac;}
+    return t/m;
+  }
+}
+
+const MAT_COLORS = {
+  Grass:[106,127,63], LeafyGrass:[115,132,74], Sand:[143,126,95], Rock:[102,108,111],
+  Slate:[63,127,107], Snow:[195,199,218], Ice:[129,194,224], Glacier:[101,176,234],
+  Mud:[58,46,36], Ground:[102,92,59], Sandstone:[137,90,71], Limestone:[206,173,148],
+  Basalt:[80,80,80], CrackedLava:[232,156,74], Salt:[198,189,181], Water:[12,84,92],
+};
+
+// ═══ Init ═══
+document.addEventListener('DOMContentLoaded', () => {
+  renderPresets();
+  updateSizeStats();
+  renderPreview();
+  showTab('preview');
+  checkDB();
+});
+
+function renderPresets() {
+  const el = document.getElementById('presetBtns');
+  el.innerHTML = Object.entries(PRESETS).map(([k,v]) =>
+    `<button class="preset-btn${config.preset===k?' active':''}" onclick="selectPreset('${k}')">${v.name}</button>`
+  ).join('');
+}
+
+function selectPreset(key) {
+  config.preset = key;
+  if (key !== 'custom') {
+    const p = PRESETS[key];
+    Object.assign(config, { waterLevel:p.waterLevel, amplitude:p.amplitude, rivers:p.rivers??false,
+      cavesEnabled:p.cavesEnabled??false, volcano:p.volcano??false, islandMode:p.islandMode??false, lighting:key });
+    syncUI();
+  }
+  renderPresets();
+  renderPreview();
+}
+
+function syncUI() {
+  document.getElementById('cfgAmplitude').value = config.amplitude;
+  document.getElementById('cfgWaterLevel').value = config.waterLevel;
+  document.getElementById('lblAmplitude').textContent = `Amplitude: ${config.amplitude.toFixed(2)}`;
+  document.getElementById('lblWaterLevel').textContent = `Nível d'água: ${(config.waterLevel*100).toFixed(0)}%`;
+  ['islandMode','rivers','cavesEnabled','volcano','placeTrees','placeRocks'].forEach(k => {
+    const btn = document.getElementById('tog' + k.charAt(0).toUpperCase() + k.slice(1));
+    if(btn) btn.className = 'toggle' + (config[k] ? ' on' : '');
+  });
+}
+
+function updateConfig(key, val) { config[key] = val; }
+function updateSlider(key, el) {
+  config[key] = +el.value;
+  const lbl = document.getElementById('lbl' + key.charAt(0).toUpperCase() + key.slice(1));
+  if(lbl) {
+    const v = +el.value;
+    if(key==='waterLevel') lbl.textContent = `Nível d'água: ${(v*100).toFixed(0)}%`;
+    else if(key==='octaves') lbl.textContent = `Octaves: ${v}`;
+    else lbl.textContent = lbl.textContent.split(':')[0] + ': ' + v.toFixed(key==='scale'?3:2);
+  }
+  renderPreview();
+}
+function toggleFeature(key, btn) {
+  config[key] = !config[key];
+  btn.className = 'toggle' + (config[key] ? ' on' : '');
+  renderPreview();
+}
+function randomSeed() {
+  config.seed = Math.floor(Math.random() * 99999);
+  document.getElementById('cfgSeed').value = config.seed;
+  renderPreview();
+}
+function updateSizeStats() {
+  const s = SIZES[config.size] || SIZES.medium;
+  document.getElementById('sizeStats').innerHTML = `
+    <div class="stat"><span class="stat-val">${s[1]}²</span>studs</div>
+    <div class="stat"><span class="stat-val">${s[0]}²</span>voxels</div>
+    <div class="stat"><span class="stat-val">${(s[1]*s[1]/1e6).toFixed(1)}M</span>área</div>`;
+}
+
+// ═══ Canvas Preview ═══
+function renderPreview() {
+  if(currentTab !== 'preview') return;
+  const canvas = document.getElementById('previewCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const p1=new Perlin(config.seed), p2=new Perlin(config.seed+500), p3=new Perlin(config.seed+1000);
+  const img = ctx.createImageData(W,H);
+  const d = img.data;
+  for(let py=0;py<H;py++) for(let px=0;px<W;px++) {
+    const nx=px/W, ny=py/H, sx=nx*8, sy=ny*8;
+    let h=(p1.fbm(sx,sy,config.octaves,config.lacunarity,config.gain)+1)*0.5;
+    const ridge=p1.ridged(sx*0.5,sy*0.5,4,config.lacunarity,config.gain);
+    if(ridge>config.mountainThreshold) h+=(ridge-config.mountainThreshold)*config.mountainAmplitude;
+    h*=config.amplitude;
+    if(config.islandMode){const cx=nx-0.5,cy=ny-0.5;h*=Math.max(0,1-Math.pow(Math.sqrt(cx*cx+cy*cy)*2,1.5));}
+    if(config.volcano&&h>0.75){const cx=nx-0.5,cy=ny-0.5;if(Math.sqrt(cx*cx+cy*cy)<0.08) h*=0.4;}
+    h=Math.max(0,Math.min(1,h));
+    let r,g,b;
+    const temp=(p2.noise(sx*0.3,sy*0.3)+1)*0.5;
+    if(h<config.waterLevel){const dp=1-h/config.waterLevel;r=12-dp*8|0;g=84-dp*40|0;b=92+dp*30|0;}
+    else if(h<config.waterLevel+0.04)[r,g,b]=MAT_COLORS.Sand;
+    else if(h>0.88)[r,g,b]=MAT_COLORS.Snow;
+    else if(h>0.78){const t=(h-0.78)/0.1;[r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0);}
+    else if(h>0.68)[r,g,b]=MAT_COLORS.Rock;
+    else if(config.preset==='desert')[r,g,b]=h>0.5?MAT_COLORS.Sandstone:MAT_COLORS.Sand;
+    else if(config.preset==='arctic')[r,g,b]=h>0.5?MAT_COLORS.Ice:MAT_COLORS.Snow;
+    else if(config.volcano&&h>0.6)[r,g,b]=MAT_COLORS.CrackedLava;
+    else if(temp>0.65)[r,g,b]=MAT_COLORS.Sand;
+    else if(temp<0.35)[r,g,b]=MAT_COLORS.LeafyGrass;
+    else [r,g,b]=MAT_COLORS.Grass;
+    if(config.rivers&&h>config.waterLevel){const rn=p1.noise(px*0.03,py*0.03+config.seed*0.1);if(Math.abs(rn)<0.015)[r,g,b]=MAT_COLORS.Water;}
+    const idx=(py*W+px)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// ═══ Tabs ═══
+function switchTab(id, el) {
+  currentTab = id;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  showTab(id);
+}
+
+function showTab(id) {
+  const body = document.getElementById('tabContent');
+  if(id==='preview') {
+    body.innerHTML = `<div class="toolbar"><span>Preview em tempo real</span><button class="btn-copy" onclick="renderPreview()">↻ Refresh</button></div>
+      <canvas id="previewCanvas" width="400" height="400" style="width:100%;max-width:500px;aspect-ratio:1;border-radius:8px;border:1px solid var(--border);image-rendering:pixelated"></canvas>
+      <div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
+    setTimeout(renderPreview, 50);
+  } else if(id==='lua') {
+    body.innerHTML = generatedLua
+      ? `<div class="toolbar"><span>Cole em ServerScriptService</span><button class="btn-copy" onclick="copyText('luaCode')">📋 Copiar</button></div><pre class="code" id="luaCode">${escHtml(generatedLua)}</pre>`
+      : '<div class="empty"><div class="empty-icon">🗺️</div>Clique em "GERAR MAPA" primeiro</div>';
+  } else if(id==='json') {
+    body.innerHTML = generatedJSON
+      ? `<div class="toolbar"><span>Config exportável</span><button class="btn-copy" onclick="copyText('jsonCode')">📋 Copiar</button></div><pre class="code" id="jsonCode">${escHtml(generatedJSON)}</pre>`
+      : '<div class="empty"><div class="empty-icon">📦</div>Gere o mapa primeiro</div>';
+  } else if(id==='history') {
+    loadHistory();
+  }
+}
+
+// ═══ Generate ═══
+async function generateMap() {
+  const btn = document.getElementById('btnGenerate');
+  const bar = document.getElementById('progressBar');
+  const fill = document.getElementById('progressFill');
+  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  bar.style.display = 'block'; fill.style.width = '10%';
+
+  const name = document.getElementById('mapName').value || 'Mapa ' + new Date().toLocaleString('pt-BR');
+
+  // Animação de progresso
+  let pct = 10;
+  const iv = setInterval(() => { pct = Math.min(90, pct + Math.random()*15); fill.style.width = pct+'%'; }, 150);
+
+  try {
+    const res = await fetch(API + '?action=generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config, name })
+    });
+    const data = await res.json();
+
+    clearInterval(iv);
+    fill.style.width = '100%';
+
+    if (data.ok) {
+      generatedLua = data.data.lua_script;
+      generatedJSON = JSON.stringify(config, null, 2);
+      setTimeout(() => { switchTab('lua', document.querySelectorAll('.tab')[1]); }, 300);
+    } else {
+      // Fallback: gerar localmente se API falhar
+      generatedLua = '-- API offline, gerando localmente...\n-- Config: ' + JSON.stringify(config, null, 2);
+      generatedJSON = JSON.stringify(config, null, 2);
+      alert('API offline — script gerado localmente. Configure o banco de dados primeiro.');
+      switchTab('lua', document.querySelectorAll('.tab')[1]);
+    }
+  } catch(e) {
+    clearInterval(iv);
+    // Gerar localmente como fallback
+    generatedJSON = JSON.stringify({ generator:'RobloxMapArchitect', version:'1.0', ...config }, null, 2);
+    generatedLua = `-- Gerado localmente (API offline)\n-- Configure: api/?action=install\n-- Config: seed=${config.seed}, size=${config.size}, preset=${config.preset}\n`;
+    switchTab('json', document.querySelectorAll('.tab')[2]);
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ GERAR MAPA';
+  setTimeout(() => { bar.style.display = 'none'; }, 500);
+}
+
+// ═══ History ═══
+async function loadHistory() {
+  const body = document.getElementById('tabContent');
+  body.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>Carregando...</div>';
+  try {
+    const res = await fetch(API + '?action=maps&limit=20');
+    const data = await res.json();
+    if(data.ok && data.data.maps.length) {
+      body.innerHTML = `<div class="toolbar"><span>${data.data.total} mapas gerados</span></div>` +
+        data.data.maps.map(m => `<div class="map-card" onclick="loadMap(${m.id})">
+          <h4>${escHtml(m.name)}</h4>
+          <div class="meta">${m.size_studs}×${m.size_studs} studs · ${m.biomes_used} · ${m.created_at}</div>
+        </div>`).join('');
+    } else {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>Nenhum mapa gerado ainda</div>';
+    }
+  } catch(e) {
+    body.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div>API offline — configure o banco de dados<br><br><button class="btn-copy" onclick="installDB()">🔧 Instalar BD</button></div>';
+  }
+}
+
+async function loadMap(id) {
+  try {
+    const res = await fetch(API + `?action=map&id=${id}`);
+    const data = await res.json();
+    if(data.ok) {
+      generatedLua = data.data.lua_script || '';
+      generatedJSON = JSON.stringify(data.data.config, null, 2);
+      config = { ...config, ...data.data.config };
+      syncUI();
+      switchTab('lua', document.querySelectorAll('.tab')[1]);
+    }
+  } catch(e) { alert('Erro ao carregar mapa'); }
+}
+
+// ═══ DB ═══
+async function checkDB() {
+  const el = document.getElementById('dbStatus');
+  try {
+    const res = await fetch(API + '?action=stats');
+    const data = await res.json();
+    if(data.ok) {
+      el.className = 'db-status ok';
+      el.textContent = `✅ BD OK · ${data.data.total_maps} mapas`;
+    } else throw new Error();
+  } catch(e) {
+    el.className = 'db-status err';
+    el.textContent = '❌ BD não instalado';
+    el.style.cursor = 'pointer';
+    el.onclick = installDB;
+  }
+}
+
+async function installDB() {
+  if(!confirm('Instalar tabelas no banco de dados?')) return;
+  try {
+    const res = await fetch(API + '?action=install', { method:'POST' });
+    const data = await res.json();
+    alert(data.ok ? `✅ Instalado! ${data.data.statements} statements executados` : '❌ Erro: ' + data.error);
+    checkDB();
+  } catch(e) { alert('Erro de conexão com a API'); }
+}
+
+// ═══ Util ═══
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function copyText(id) {
+  const el = document.getElementById(id);
+  navigator.clipboard?.writeText(el.textContent);
+  const btn = el.previousElementSibling?.querySelector('.btn-copy') || document.querySelector('.btn-copy');
+  if(btn) { const orig = btn.textContent; btn.textContent = '✅ Copiado!'; setTimeout(()=>btn.textContent=orig, 1500); }
+}
+</script>
+</body>
+</html>
