@@ -398,6 +398,114 @@ function renderPreview() {
     const idx=(py*W+px)*4;d[idx]=r;d[idx+1]=g;d[idx+2]=b;d[idx+3]=255;
   }
   ctx.putImageData(img,0,0);
+
+  // ═══ OVERLAYS: árvores, pedras, cavernas, vulcão ═══
+  const p4 = new Perlin(config.seed + 7777);
+  const p5 = new Perlin(config.seed + 8888);
+  const p6 = new Perlin(config.seed + 9999);
+
+  // Função helper pra calcular altura num ponto
+  function getH(px, py) {
+    const nx=px/W, ny=py/H, sx=nx*8, sy=ny*8;
+    let h=(p1.fbm(sx,sy,config.octaves,config.lacunarity,config.gain)+1)*0.5;
+    const ridge=p1.ridged(sx*0.5,sy*0.5,4,config.lacunarity,config.gain);
+    if(ridge>config.mountainThreshold) h+=(ridge-config.mountainThreshold)*config.mountainAmplitude;
+    h*=config.amplitude;
+    if(config.islandMode){const cx=nx-0.5,cy=ny-0.5;h*=Math.max(0,1-Math.pow(Math.sqrt(cx*cx+cy*cy)*2,1.5));}
+    return Math.max(0,Math.min(1,h));
+  }
+
+  // 🌋 Vulcão — cratera com glow
+  if (config.volcano) {
+    const vcx = W * 0.5, vcy = H * 0.5;
+    const craterR = W * 0.04;
+    const glowR = W * 0.12;
+    // Glow laranja
+    const grad = ctx.createRadialGradient(vcx, vcy, craterR, vcx, vcy, glowR);
+    grad.addColorStop(0, 'rgba(255, 100, 0, 0.4)');
+    grad.addColorStop(0.5, 'rgba(232, 156, 74, 0.15)');
+    grad.addColorStop(1, 'rgba(232, 156, 74, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(vcx - glowR, vcy - glowR, glowR * 2, glowR * 2);
+    // Cratera
+    ctx.beginPath();
+    ctx.arc(vcx, vcy, craterR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(200, 60, 0, 0.6)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 120, 0, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 🕳️ Cavernas — manchas escuras semi-transparentes
+  if (config.cavesEnabled) {
+    ctx.globalAlpha = 0.35;
+    for (let px = 0; px < W; px += 6) {
+      for (let py = 0; py < H; py += 6) {
+        const h = getH(px, py);
+        if (h > config.waterLevel && h < 0.75) {
+          const caveN = p6.noise(px * 0.05, py * 0.05);
+          if (caveN > config.caveThreshold * 0.8) {
+            const size = 2 + (caveN - config.caveThreshold * 0.8) * 20;
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            ctx.arc(px, py, Math.min(size, 5), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // 🌳 Árvores — pontos verdes
+  if (config.placeTrees) {
+    for (let px = 0; px < W; px += 4) {
+      for (let py = 0; py < H; py += 4) {
+        const h = getH(px, py);
+        if (h > config.waterLevel + 0.04 && h < 0.75) {
+          const tn = p4.noise(px * 0.1, py * 0.1);
+          const temp = (p2.noise(px/W*8*0.3, py/H*8*0.3)+1)*0.5;
+          let density = config.treeDensity;
+          if (temp > 0.4 && temp < 0.7) density *= 3; // floresta
+          if (config.preset === 'desert' || config.preset === 'arctic') density *= 0.1;
+
+          if (tn > (1 - density * 20)) {
+            const size = 1.5 + Math.random() * 1.5;
+            // Sombra
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.arc(px + 1, py + 1, size, 0, Math.PI * 2);
+            ctx.fill();
+            // Árvore
+            ctx.fillStyle = temp > 0.6 ? '#2d5a1e' : '#3a7a2a';
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
+  // 🪨 Pedras — pontos cinza
+  if (config.placeRocks) {
+    for (let px = 0; px < W; px += 6) {
+      for (let py = 0; py < H; py += 6) {
+        const h = getH(px, py);
+        if (h > config.waterLevel + 0.02 && h < 0.9) {
+          const rn = p5.noise(px * 0.15, py * 0.15);
+          if (rn > (1 - config.rockDensity * 40)) {
+            const size = 1 + Math.random() * 1.5;
+            ctx.fillStyle = 'rgba(140,140,140,0.7)';
+            ctx.beginPath();
+            ctx.arc(px, py, size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
 }
 
 // ═══ Tabs ═══
