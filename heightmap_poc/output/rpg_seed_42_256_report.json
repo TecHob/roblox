@@ -1,0 +1,107 @@
+{
+  "terrain_config": {
+    "seed": 42,
+    "resolution": 256,
+    "amplitude": 0.55,
+    "water_level": 0.2,
+    "octaves": 6,
+    "lacunarity": 2.0,
+    "gain": 0.5,
+    "mountain_threshold": 0.6,
+    "mountain_amplitude": 0.4,
+    "island_mode": false,
+    "volcano": false
+  },
+  "runs": {
+    "original": {
+      "seconds": 0.296,
+      "stats": {
+        "min": 0.133431,
+        "max": 0.415936,
+        "mean": 0.279102,
+        "std": 0.045801,
+        "water_area_percent": 5.197,
+        "mean_slope": 0.0099898,
+        "max_slope": 0.0564874
+      }
+    },
+    "light": {
+      "seconds": 5.756,
+      "erosion_config": {
+        "droplets": 6400,
+        "max_steps": 40,
+        "inertia": 0.05,
+        "sediment_capacity_factor": 4.0,
+        "min_sediment_capacity": 0.01,
+        "deposit_speed": 0.22,
+        "erode_speed": 0.18,
+        "evaporate_speed": 0.01,
+        "gravity": 4.0,
+        "start_speed": 1.0,
+        "start_water": 1.0,
+        "erosion_radius": 2
+      },
+      "stats": {
+        "min": 0.133431,
+        "max": 0.415936,
+        "mean": 0.26243,
+        "std": 0.048543,
+        "water_area_percent": 11.343,
+        "mean_slope": 0.0096056,
+        "max_slope": 0.0692882
+      }
+    },
+    "medium": {
+      "seconds": 0.057,
+      "erosion_config": {
+        "droplets": 14080,
+        "max_steps": 40,
+        "inertia": 0.05,
+        "sediment_capacity_factor": 4.0,
+        "min_sediment_capacity": 0.01,
+        "deposit_speed": 0.3,
+        "erode_speed": 0.3,
+        "evaporate_speed": 0.01,
+        "gravity": 4.0,
+        "start_speed": 1.0,
+        "start_water": 1.0,
+        "erosion_radius": 3
+      },
+      "stats": {
+        "min": 0.133431,
+        "max": 0.415936,
+        "mean": 0.252093,
+        "std": 0.047417,
+        "water_area_percent": 15.469,
+        "mean_slope": 0.0085263,
+        "max_slope": 0.0874338
+      }
+    },
+    "strong": {
+      "seconds": 0.093,
+      "erosion_config": {
+        "droplets": 23040,
+        "max_steps": 40,
+        "inertia": 0.05,
+        "sediment_capacity_factor": 4.0,
+        "min_sediment_capacity": 0.01,
+        "deposit_speed": 0.38,
+        "erode_speed": 0.42,
+        "evaporate_speed": 0.01,
+        "gravity": 4.0,
+        "start_speed": 1.0,
+        "start_water": 1.0,
+        "erosion_radius": 3
+      },
+      "stats": {
+        "min": 0.133431,
+        "max": 0.415936,
+        "mean": 0.260929,
+        "std": 0.042483,
+        "water_area_percent": 6.761,
+        "mean_slope": 0.0071417,
+        "max_slope": 0.0772778
+      }
+    }
+  }
+}

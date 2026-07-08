@@ -93,6 +93,9 @@ LUA;
         // Adicionar cálculo de altura
         $lua .= $this->heightSection();
 
+        // Calibração automática do nível da água (garante água mesmo em seeds "secas")
+        $lua .= $this->waterCalibrationSection();
+
         // Main generation loop
         $lua .= $this->mainLoop();
 
@@ -105,6 +108,9 @@ LUA;
         if ($this->val('placeTrees', false)) {
             $lua .= $this->assetSection();
         }
+
+        // Spawn (reposiciona jogador em cima do terreno gerado)
+        $lua .= $this->spawnSection();
 
         // Lighting
         $lua .= $this->lightingSection();
@@ -274,7 +280,7 @@ LUA;
 
 -- ═══ ALTURA ═══
 local function getHeight(x, z, cfg)
-    local h = (fbm(x, z, cfg) + 0.5) * cfg.MAX_HEIGHT * 0.6 * cfg.AMPLITUDE
+    local h = (fbm(x, z, cfg) + 1) * 0.5 * cfg.AMPLITUDE * cfg.MAX_HEIGHT
     local ridge = ridgedFbm(x, z, cfg)
     if ridge > cfg.MOUNTAIN_THRESH then
         h = h + (ridge - cfg.MOUNTAIN_THRESH) / (1 - cfg.MOUNTAIN_THRESH) * cfg.MOUNTAIN_AMP
@@ -285,6 +291,73 @@ end
 local function getSlope(x, z, cfg)
     local h = getHeight(x, z, cfg)
     return math.sqrt((getHeight(x+1, z, cfg) - h)^2 + (getHeight(x, z+1, cfg) - h)^2) / 4
+end
+
+-- ═══ RIOS (parâmetros determinísticos — usados por rios E por assets) ═══
+local function riverParams(cfg, r)
+    local rSeed = cfg.SEED + r * 333
+    local startZ = cfg.MAP_SIZE_Z * (0.2 + (math.noise(rSeed * 0.013, 0, 1) + 1) * 0.5 * 0.6)
+    local rWidth = 2 + (math.noise(rSeed * 0.017, 2, 3) + 1) * 0.5 * 3
+    return rSeed, startZ, rWidth
+end
+
+local function isRiverAt(cfg, x, z)
+    if not cfg.RIVERS then return false end
+    for r = 1, 3 do
+        local rSeed, startZ, rWidth = riverParams(cfg, r)
+        local off = math.noise(x * 0.02, 0, rSeed) * 25
+        local cz = startZ + off
+        if math.abs(z - cz) < rWidth then
+            return true
+        end
+    end
+    return false
+end
+
+-- ═══ ÁREA DE LAGO (média da vizinhança — evita poças isoladas de 1 coluna) ═══
+local function isLakeArea(cfg, x, z)
+    local sum, samples = 0, 0
+    for dx = -4, 4, 4 do
+        for dz = -4, 4, 4 do
+            local sx, sz = x + dx, z + dz
+            if sx >= 0 and sx < cfg.MAP_SIZE_X and sz >= 0 and sz < cfg.MAP_SIZE_Z then
+                sum = sum + getHeight(sx, sz, cfg)
+                samples = samples + 1
+            end
+        end
+    end
+    if samples == 0 then return false end
+    return (sum / samples) < cfg.WATER_LEVEL
+end
+
+LUA;
+    }
+
+    private function waterCalibrationSection(): string
+    {
+        return <<<'LUA'
+
+-- ═══ CALIBRAÇÃO AUTOMÁTICA DO NÍVEL DA ÁGUA ═══
+-- Garante uma proporção mínima de água visível, independente de quão "seca"
+-- a combinação seed/preset/tamanho de mapa tenha saído (a distribuição real
+-- do ruído FBM não é uniforme, então um WATER_LEVEL fixo pode ficar sempre
+-- acima de toda a altura gerada em mapas pequenos ou seeds específicas)
+do
+    local samples = {}
+    local sampleCount = 400
+    for i = 1, sampleCount do
+        local sx = math.random(0, CONFIG.MAP_SIZE_X - 1)
+        local sz = math.random(0, CONFIG.MAP_SIZE_Z - 1)
+        table.insert(samples, getHeight(sx, sz, CONFIG))
+    end
+    table.sort(samples)
+    local targetPercentile = 0.18
+    local idx = math.max(1, math.floor(sampleCount * targetPercentile))
+    local calibratedWater = math.floor(samples[idx])
+    if calibratedWater > CONFIG.WATER_LEVEL then
+        print("💧 Nível da água recalibrado:", CONFIG.WATER_LEVEL, "->", calibratedWater)
+        CONFIG.WATER_LEVEL = calibratedWater
+    end
 end
 
 LUA;
@@ -309,8 +382,8 @@ Terrain.WaterReflectance = 0.8
 Terrain.WaterTransparency = 0.3
 Terrain.WaterWaveSize = 0.2
 Terrain.WaterWaveSpeed = 10
-Terrain.Decoration = true
-Terrain.GrassLength = 0.6
+-- Nota: Terrain.Decoration e Terrain.GrassLength são "Not Scriptable" na API do Roblox
+-- (só podem ser ajustadas manualmente na janela Properties do Studio, não via script)
 
 local total = CONFIG.MAP_SIZE_X * CONFIG.MAP_SIZE_Z
 local done = 0
@@ -321,6 +394,7 @@ for x = 0, CONFIG.MAP_SIZE_X - 1 do
         local surfH = math.floor(h)
         local slope = getSlope(x, z, CONFIG)
         local biome = getBiome(x, z, CONFIG)
+        local lake = surfH < CONFIG.WATER_LEVEL and isLakeArea(CONFIG, x, z)
 
         for y = 0, math.max(surfH, CONFIG.WATER_LEVEL) do
             local pos = Vector3.new(
@@ -328,13 +402,13 @@ for x = 0, CONFIG.MAP_SIZE_X - 1 do
             )
             if y <= surfH then
                 {$caveCheck}
-                    local uw = y < CONFIG.WATER_LEVEL and surfH < CONFIG.WATER_LEVEL
+                    local uw = y < CONFIG.WATER_LEVEL and lake
                     local mat = getMaterial(y, CONFIG.MAX_HEIGHT, slope, biome, uw)
                     if y < surfH - 3 then mat = Enum.Material.Rock
                     elseif y < surfH - 1 and mat ~= Enum.Material.Rock then mat = Enum.Material.Ground end
                     Terrain:FillBlock(CFrame.new(pos), Vector3.new(4,4,4), mat)
                 end
-            elseif y <= CONFIG.WATER_LEVEL and surfH < CONFIG.WATER_LEVEL then
+            elseif y <= CONFIG.WATER_LEVEL and lake then
                 Terrain:FillBlock(CFrame.new(pos), Vector3.new(4,4,4), Enum.Material.Water)
             end
         end
@@ -355,39 +429,26 @@ LUA;
 
 -- ═══ RIOS ═══
 if CONFIG.RIVERS then
-    for r = 1, 3 do
-        local rSeed = CONFIG.SEED + r * 333
-        local startZ = CONFIG.MAP_SIZE_Z * (0.2 + math.random() * 0.6)
-        local rWidth = 2 + math.random() * 3
-        for x = 0, CONFIG.MAP_SIZE_X - 1 do
-            local off = math.noise(x * 0.02, 0, rSeed) * 25
-            local cz = startZ + off
-            for dz = -math.ceil(rWidth), math.ceil(rWidth) do
-                local z = math.floor(cz + dz)
-                if z >= 0 and z < CONFIG.MAP_SIZE_Z then
-                    local dist = math.abs(dz) / rWidth
-                    if dist < 1 then
-                        local h = getHeight(x, z, CONFIG)
-                        if h > CONFIG.WATER_LEVEL then
-                            local depth = (1 - dist) * 3
-                            local surfH = math.floor(h)
-                            for y = surfH, surfH - math.ceil(depth), -1 do
-                                Terrain:FillBlock(
-                                    CFrame.new(Vector3.new((x-CONFIG.MAP_SIZE_X/2)*4, y*4, (z-CONFIG.MAP_SIZE_Z/2)*4)),
-                                    Vector3.new(4,4,4), Enum.Material.Air)
-                            end
-                            for y = surfH - math.ceil(depth) + 1, surfH - 1 do
-                                Terrain:FillBlock(
-                                    CFrame.new(Vector3.new((x-CONFIG.MAP_SIZE_X/2)*4, y*4, (z-CONFIG.MAP_SIZE_Z/2)*4)),
-                                    Vector3.new(4,4,4), Enum.Material.Water)
-                            end
-                        end
+    local riverDepth = 3
+    for x = 0, CONFIG.MAP_SIZE_X - 1 do
+        for z = 0, CONFIG.MAP_SIZE_Z - 1 do
+            if isRiverAt(CONFIG, x, z) then
+                local h = getHeight(x, z, CONFIG)
+                if h > CONFIG.WATER_LEVEL and h < CONFIG.MAX_HEIGHT * 0.55 then
+                    local surfH = math.floor(h)
+                    local floorY = surfH - riverDepth
+                    -- Preenche água do fundo (piso sólido preservado abaixo) até a superfície
+                    for y = floorY, surfH do
+                        Terrain:FillBlock(
+                            CFrame.new(Vector3.new((x-CONFIG.MAP_SIZE_X/2)*4, y*4, (z-CONFIG.MAP_SIZE_Z/2)*4)),
+                            Vector3.new(4,4,4), Enum.Material.Water)
                     end
                 end
             end
         end
-        print("🌊 Rio " .. r .. "/3")
+        if x % 16 == 0 then task.wait() end
     end
+    print("🌊 Rios gerados")
 end
 
 LUA;
@@ -411,14 +472,20 @@ if CONFIG.PLACE_TREES then
     for x = 0, CONFIG.MAP_SIZE_X - 1, 2 do
         for z = 0, CONFIG.MAP_SIZE_Z - 1, 2 do
             local h = getHeight(x, z, CONFIG)
-            if h > CONFIG.WATER_LEVEL + 2 and h < CONFIG.MAX_HEIGHT * 0.75 then
+            if h > CONFIG.WATER_LEVEL + 2 and h < CONFIG.MAX_HEIGHT * 0.75 and not isRiverAt(CONFIG, x, z) then
                 local biome = getBiome(x, z, CONFIG)
                 local density = CONFIG.TREE_DENSITY
-                if biome == "FOREST" or biome == "JUNGLE" then density = density * 3
+                if biome == "FOREST" or biome == "JUNGLE" then density = density * 2.5
                 elseif biome == "DESERT" or biome == "ARCTIC" then density = density * 0.1 end
 
-                local tn = math.noise(x * 0.1, z * 0.1, CONFIG.SEED + 7777)
-                if tn > (1 - density * 20) then
+                -- Hash determinístico uniforme via bit32 (evita clusters de noise de baixa frequência)
+                local hn = (x * 374761393 + z * 668265263 + (CONFIG.SEED + 7777) * 2147483) % 4294967296
+                hn = bit32.bxor(hn, bit32.rshift(hn, 15))
+                hn = (hn * 2246822519) % 4294967296
+                hn = bit32.bxor(hn, bit32.rshift(hn, 13))
+                local rnd = (hn % 2147483647) / 2147483647
+
+                if rnd < math.min(density * 3, 0.55) then
                     local pos = Vector3.new((x-CONFIG.MAP_SIZE_X/2)*4, math.floor(h)*4+2, (z-CONFIG.MAP_SIZE_Z/2)*4)
                     local trunk = Instance.new("Part")
                     trunk.Size = Vector3.new(2, 8+math.random()*6, 2)
@@ -442,6 +509,45 @@ if CONFIG.PLACE_TREES then
         if x % 16 == 0 then task.wait() end
     end
     print("🌳 Assets colocados")
+end
+
+LUA;
+    }
+
+    private function spawnSection(): string
+    {
+        return <<<'LUA'
+
+-- ═══ SPAWN (evita jogador nascer enterrado no terreno) ═══
+do
+    local spawnH = getHeight(CONFIG.MAP_SIZE_X / 2, CONFIG.MAP_SIZE_Z / 2, CONFIG)
+    local spawnY = (spawnH + 3) * 4
+
+    local spawnPoint = Workspace:FindFirstChild("MapSpawn")
+    if not spawnPoint then
+        spawnPoint = Instance.new("SpawnLocation")
+        spawnPoint.Name = "MapSpawn"
+        spawnPoint.Size = Vector3.new(6, 1, 6)
+        spawnPoint.Anchored = true
+        spawnPoint.CanCollide = true
+        spawnPoint.TopSurface = Enum.SurfaceType.Smooth
+        spawnPoint.Parent = Workspace
+    end
+    spawnPoint.Position = Vector3.new(0, spawnY, 0)
+
+    -- Desativa outros SpawnLocations antigos pra não conflitar
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("SpawnLocation") and obj ~= spawnPoint then
+            obj.Enabled = false
+        end
+    end
+
+    -- Reposiciona jogadores que já estejam no jogo (evita ficar preso dentro do terreno)
+    for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            plr.Character:SetPrimaryPartCFrame(CFrame.new(0, spawnY + 3, 0))
+        end
+    end
 end
 
 LUA;
