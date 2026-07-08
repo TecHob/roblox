@@ -433,8 +433,14 @@ function updateSizeStats() {
 }
 
 // ═══ Canvas Preview ═══
+let render3DTimer = null;
 function renderPreview() {
   if(currentTab !== 'preview') return;
+  if (is3D) {
+    if (render3DTimer) clearTimeout(render3DTimer);
+    render3DTimer = setTimeout(() => { if(document.getElementById('canvas3DContainer')) render3DPreview(); }, 150);
+    return;
+  }
   const canvas = document.getElementById('previewCanvas');
   if(!canvas) return;
   const ctx = canvas.getContext('2d');
