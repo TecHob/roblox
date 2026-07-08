@@ -90,6 +90,16 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
 .db-status.ok { background: #0d2818; color: var(--green2); }
 .db-status.err { background: #2d1215; color: var(--red); }
 
+/* 3D Preview */
+.view-toggle { display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.view-toggle button { padding:4px 14px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-size:12px; font-weight:700; transition:all 0.15s; }
+.view-toggle button.active { background:var(--accent); color:#fff; }
+#canvas3DContainer { width:100%; aspect-ratio:1; max-width:600px; margin:0 auto; border-radius:8px; border:1px solid var(--border); overflow:hidden; background:#0a0e14; cursor:grab; }
+#canvas3DContainer:active { cursor:grabbing; }
+#canvas3DContainer canvas { display:block; width:100%!important; height:100%!important; }
+.hint-3d { text-align:center; margin-top:6px; font-size:11px; color:var(--text3); }
+.loading-3d { display:flex; align-items:center; justify-content:center; width:100%; aspect-ratio:1; max-width:600px; margin:0 auto; border-radius:8px; border:1px solid var(--border); background:#0a0e14; color:var(--text2); font-size:14px; }
+
 /* ═══ RESPONSIVO ═══ */
 
 /* Tablet */
@@ -136,6 +146,7 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
   .tab { padding: 8px 10px; font-size: 11px; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
@@ -280,6 +291,8 @@ let config = {
 let generatedLua = '';
 let generatedJSON = '';
 let currentTab = 'preview';
+let is3D = false;
+let scene3D = null, camera3D = null, renderer3D = null, animFrame3D = null;
 
 const PRESETS = {
   tropical: { name:'🏝️ Tropical', waterLevel:0.3, amplitude:0.7, rivers:true, cavesEnabled:false, volcano:false, islandMode:true },
@@ -592,6 +605,7 @@ function renderPreview() {
 
 // ═══ Tabs ═══
 function switchTab(id, el) {
+  if (currentTab === 'preview' && id !== 'preview') cleanup3D();
   currentTab = id;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   if(el) el.classList.add('active');
@@ -601,22 +615,45 @@ function switchTab(id, el) {
 function showTab(id) {
   const body = document.getElementById('tabContent');
   if(id==='preview') {
-    body.innerHTML = `<div class="toolbar">
-        <span>Preview em tempo real</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button class="btn-copy" onclick="zoomMap(-1)" title="Diminuir">➖</button>
-          <span id="zoomLevel" style="font-size:12px;min-width:40px;text-align:center;color:var(--accent)">100%</span>
-          <button class="btn-copy" onclick="zoomMap(1)" title="Aumentar">➕</button>
-          <button class="btn-copy" onclick="zoomMap(0)" title="Reset">↺</button>
-          <button class="btn-copy" onclick="renderPreview()">↻ Refresh</button>
+    cleanup3D();
+    const legendHtml = `<div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
+    if (is3D) {
+      body.innerHTML = `<div class="toolbar">
+          <div class="view-toggle">
+            <button onclick="toggle3D(false)">2D</button>
+            <button class="active" onclick="toggle3D(true)">3D</button>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <span style="font-size:11px;color:var(--text2)">Arraste: rotação · Scroll: zoom · Botão dir.: pan</span>
+            <button class="btn-copy" onclick="reset3DCamera()" title="Reset câmera">↺</button>
+            <button class="btn-copy" onclick="cleanup3D();render3DPreview()">↻</button>
+          </div>
         </div>
-      </div>
-      <div id="canvasContainer" style="width:100%;max-width:600px;margin:0 auto;overflow:hidden;border-radius:8px;border:1px solid var(--border);position:relative;cursor:grab;aspect-ratio:1;background:#000">
-        <canvas id="previewCanvas" width="512" height="512" style="width:100%;height:100%;display:block;transform-origin:center center;transition:transform 0.15s"></canvas>
-      </div>
-      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Scroll para zoom · Clique e arraste para mover</div>
-      <div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
-    setTimeout(()=>{ renderPreview(); initMapZoom(); }, 50);
+        <div id="canvas3DContainer"></div>
+        <div class="hint-3d">🖱️ Rotacionar · 🔲 Scroll zoom · Botão direito pan</div>
+        ${legendHtml}`;
+      setTimeout(()=>{ render3DPreview(); }, 50);
+    } else {
+      body.innerHTML = `<div class="toolbar">
+          <div class="view-toggle">
+            <button class="active" onclick="toggle3D(false)">2D</button>
+            <button onclick="toggle3D(true)">3D</button>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <button class="btn-copy" onclick="zoomMap(-1)" title="Diminuir">➖</button>
+            <span id="zoomLevel" style="font-size:12px;min-width:40px;text-align:center;color:var(--accent)">100%</span>
+            <button class="btn-copy" onclick="zoomMap(1)" title="Aumentar">➕</button>
+            <button class="btn-copy" onclick="zoomMap(0)" title="Reset">↺</button>
+            <button class="btn-copy" onclick="renderPreview()">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="canvasContainer" style="width:100%;max-width:600px;margin:0 auto;overflow:hidden;border-radius:8px;border:1px solid var(--border);position:relative;cursor:grab;aspect-ratio:1;background:#000">
+          <canvas id="previewCanvas" width="512" height="512" style="width:100%;height:100%;display:block;transform-origin:center center;transition:transform 0.15s"></canvas>
+        </div>
+        <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text3)">Scroll para zoom · Clique e arraste para mover</div>
+        ${legendHtml}`;
+      setTimeout(()=>{ renderPreview(); initMapZoom(); }, 50);
+    }
   } else if(id==='lua') {
     body.innerHTML = generatedLua
       ? `<div class="toolbar"><span>Cole em ServerScriptService</span><button class="btn-copy" onclick="copyText('luaCode')">📋 Copiar</button></div><pre class="code" id="luaCode">${escHtml(generatedLua)}</pre>`
@@ -843,6 +880,398 @@ function copyText(id) {
   navigator.clipboard?.writeText(el.textContent);
   const btn = el.previousElementSibling?.querySelector('.btn-copy') || document.querySelector('.btn-copy');
   if(btn) { const orig = btn.textContent; btn.textContent = '✅ Copiado!'; setTimeout(()=>btn.textContent=orig, 1500); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  PREVIEW 3D — Three.js
+// ═══════════════════════════════════════════════════════
+
+// Orbit state
+let orbit = { theta: Math.PI*0.25, phi: Math.PI*0.3, radius: 220, targetX:0, targetY:12, targetZ:0, dragging:false, rightDrag:false, lastX:0, lastY:0, lastTouchDist:0 };
+
+function toggle3D(val) {
+  is3D = val;
+  showTab('preview');
+}
+
+function cleanup3D() {
+  if (animFrame3D) { cancelAnimationFrame(animFrame3D); animFrame3D = null; }
+  if (renderer3D) {
+    renderer3D.dispose();
+    renderer3D.forceContextLoss();
+    const c = renderer3D.domElement;
+    if (c && c.parentNode) c.parentNode.removeChild(c);
+    renderer3D = null;
+  }
+  if (scene3D) {
+    scene3D.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (obj.material.map) obj.material.map.dispose();
+        obj.material.dispose();
+      }
+    });
+    scene3D = null;
+  }
+  camera3D = null;
+}
+
+function reset3DCamera() {
+  orbit.theta = Math.PI*0.25; orbit.phi = Math.PI*0.3; orbit.radius = 220;
+  orbit.targetX = 0; orbit.targetY = 12; orbit.targetZ = 0;
+}
+
+function getTerrainHeight(nx, ny, p1) {
+  const sx = nx*8, sy = ny*8;
+  let h = (p1.fbm(sx, sy, config.octaves, config.lacunarity, config.gain)+1)*0.5;
+  const ridge = p1.ridged(sx*0.5, sy*0.5, 4, config.lacunarity, config.gain);
+  if (ridge > config.mountainThreshold) h += (ridge - config.mountainThreshold) * config.mountainAmplitude;
+  h *= config.amplitude;
+  if (config.islandMode) {
+    const cx = nx-0.5, cy = ny-0.5;
+    h *= Math.max(0, 1 - Math.pow(Math.sqrt(cx*cx + cy*cy)*2, 1.5));
+  }
+  if (config.volcano && h > 0.75) {
+    const cx = nx-0.5, cy = ny-0.5;
+    if (Math.sqrt(cx*cx + cy*cy) < 0.08) h *= 0.4;
+  }
+  return Math.max(0, Math.min(1, h));
+}
+
+function render3DPreview() {
+  cleanup3D();
+  const container = document.getElementById('canvas3DContainer');
+  if (!container) return;
+
+  const width = container.clientWidth || 600;
+  const height = container.clientHeight || 600;
+
+  // ── Scene ──
+  scene3D = new THREE.Scene();
+  scene3D.background = new THREE.Color(0x0a0e14);
+  scene3D.fog = new THREE.FogExp2(0x0a0e14, 0.0015);
+
+  // ── Camera ──
+  camera3D = new THREE.PerspectiveCamera(55, width/height, 0.5, 1200);
+
+  // ── Renderer ──
+  renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer3D.setSize(width, height);
+  renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer3D.shadowMap.enabled = true;
+  renderer3D.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer3D.domElement);
+
+  // ── Lights ──
+  const ambient = new THREE.AmbientLight(0x506080, 0.5);
+  scene3D.add(ambient);
+  const hemi = new THREE.HemisphereLight(0x87ceeb, 0x444422, 0.4);
+  scene3D.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff0d0, 1.0);
+  sun.position.set(80, 140, 60);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -120; sun.shadow.camera.right = 120;
+  sun.shadow.camera.top = 120; sun.shadow.camera.bottom = -120;
+  scene3D.add(sun);
+
+  // ── Generate terrain data ──
+  const RES = 180;
+  const WORLD = 200;
+  const HEIGHT_SCALE = 55;
+  const p1 = new Perlin(config.seed);
+  const p2 = new Perlin(config.seed + 500);
+  const p3 = new Perlin(config.seed + 1000);
+
+  // Offscreen canvas for texture
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = RES; texCanvas.height = RES;
+  const texCtx = texCanvas.getContext('2d');
+  const texImg = texCtx.createImageData(RES, RES);
+  const td = texImg.data;
+
+  const heights = new Float32Array(RES * RES);
+
+  for (let iy = 0; iy < RES; iy++) {
+    for (let ix = 0; ix < RES; ix++) {
+      const nx = ix/RES, ny = iy/RES;
+      const sx = nx*8, sy = ny*8;
+      const h = getTerrainHeight(nx, ny, p1);
+      heights[iy*RES + ix] = h;
+
+      // Color — same logic as 2D
+      let r, g, b;
+      const temp = (p2.noise(sx*0.3, sy*0.3)+1)*0.5;
+      if (h < config.waterLevel) {
+        const dp = 1 - h/config.waterLevel;
+        r = 12-dp*8|0; g = 84-dp*40|0; b = 92+dp*30|0;
+      } else if (h < config.waterLevel+0.04) { [r,g,b] = MAT_COLORS.Sand; }
+      else if (h > 0.88) { [r,g,b] = MAT_COLORS.Snow; }
+      else if (h > 0.78) { const t=(h-0.78)/0.1; [r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0); }
+      else if (h > 0.68) { [r,g,b] = MAT_COLORS.Rock; }
+      else if (config.preset==='desert') {
+        const duneN=(p3.noise(sx*1.5,sy*1.5)+1)*0.5, erosion=(p2.noise(sx*0.8,sy*0.8)+1)*0.5, oasisN=p3.noise(sx*0.2,sy*0.2);
+        if(oasisN>0.42){[r,g,b]=oasisN>0.47?MAT_COLORS.Water:[80,110,50];}
+        else if(h>0.55){[r,g,b]=MAT_COLORS.Sandstone;}
+        else if(erosion>0.65&&h>0.3){[r,g,b]=MAT_COLORS.Ground;}
+        else{const s=0.85+duneN*0.3;r=MAT_COLORS.Sand[0]*s|0;g=MAT_COLORS.Sand[1]*s|0;b=MAT_COLORS.Sand[2]*s|0;}
+      }
+      else if (config.preset==='arctic') {
+        const iceN=(p3.noise(sx*0.6,sy*0.6)+1)*0.5;
+        if(h>0.6)[r,g,b]=MAT_COLORS.Glacier;
+        else if(iceN>0.6)[r,g,b]=MAT_COLORS.Ice;
+        else if(iceN<0.3&&h>0.35)[r,g,b]=MAT_COLORS.Rock;
+        else [r,g,b]=MAT_COLORS.Snow;
+      }
+      else if (config.volcano && h > 0.6) { [r,g,b] = MAT_COLORS.CrackedLava; }
+      else if (temp > 0.65) { [r,g,b] = MAT_COLORS.Sand; }
+      else if (temp < 0.35) { [r,g,b] = MAT_COLORS.LeafyGrass; }
+      else { [r,g,b] = MAT_COLORS.Grass; }
+      // Rivers
+      if (config.rivers && h > config.waterLevel) {
+        const rn = p1.noise(ix*(512/RES)*0.03, iy*(512/RES)*0.03 + config.seed*0.1);
+        if (Math.abs(rn) < 0.015) { [r,g,b] = MAT_COLORS.Water; }
+      }
+      const idx = (iy*RES + ix)*4;
+      td[idx]=r; td[idx+1]=g; td[idx+2]=b; td[idx+3]=255;
+    }
+  }
+  texCtx.putImageData(texImg, 0, 0);
+
+  // ── Build terrain mesh ──
+  const geo = new THREE.PlaneGeometry(WORLD, WORLD, RES-1, RES-1);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position.array;
+
+  for (let iy = 0; iy < RES; iy++) {
+    for (let ix = 0; ix < RES; ix++) {
+      const vi = iy * RES + ix;
+      const h = heights[vi];
+      pos[vi*3 + 1] = h * HEIGHT_SCALE;
+    }
+  }
+  geo.computeVertexNormals();
+
+  const texture = new THREE.CanvasTexture(texCanvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  const terrainMat = new THREE.MeshLambertMaterial({ map: texture });
+  const terrain = new THREE.Mesh(geo, terrainMat);
+  terrain.receiveShadow = true;
+  scene3D.add(terrain);
+
+  // ── Water plane ──
+  if (config.waterLevel > 0.01) {
+    const waterGeo = new THREE.PlaneGeometry(WORLD*1.3, WORLD*1.3);
+    waterGeo.rotateX(-Math.PI / 2);
+    const waterMat = new THREE.MeshPhongMaterial({
+      color: 0x0c545c, transparent: true, opacity: 0.72,
+      shininess: 90, specular: 0x336688,
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.position.y = config.waterLevel * HEIGHT_SCALE;
+    water.receiveShadow = true;
+    scene3D.add(water);
+  }
+
+  // ── Volcano glow ──
+  if (config.volcano) {
+    const glowGeo = new THREE.SphereGeometry(5, 16, 8);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.5 });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    const vH = getTerrainHeight(0.5, 0.5, p1);
+    glow.position.set(0, vH * HEIGHT_SCALE + 2, 0);
+    scene3D.add(glow);
+    // Lava light
+    const lavaLight = new THREE.PointLight(0xff4400, 1.5, 60);
+    lavaLight.position.copy(glow.position);
+    scene3D.add(lavaLight);
+  }
+
+  // ── Trees (InstancedMesh) ──
+  if (config.placeTrees) {
+    const p4 = new Perlin(config.seed + config.treeSeed);
+    const treePos = [];
+    const step = 3;
+    for (let iy = 0; iy < RES; iy += step) {
+      for (let ix = 0; ix < RES; ix += step) {
+        const h = heights[iy*RES + ix];
+        if (h > config.waterLevel+0.04 && h < 0.75) {
+          const nx = ix/RES, ny = iy/RES;
+          const tn = p4.noise(nx*80*0.1, ny*80*0.1);
+          const temp = (p2.noise(nx*8*0.3, ny*8*0.3)+1)*0.5;
+          let density = config.treeDensity;
+          if (temp > 0.4 && temp < 0.7) density *= 3;
+          if (config.preset==='desert'||config.preset==='arctic') density *= 0.1;
+          if (tn > (1 - density*20)) {
+            treePos.push({
+              x: (ix/RES - 0.5) * WORLD,
+              y: h * HEIGHT_SCALE,
+              z: (iy/RES - 0.5) * WORLD,
+              s: 0.6 + Math.random()*0.6
+            });
+          }
+        }
+      }
+    }
+    if (treePos.length > 0) {
+      const maxT = Math.min(treePos.length, 800);
+      const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 2.2, 5);
+      const leafGeo = new THREE.SphereGeometry(1.3, 5, 4);
+      const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5a3d2b });
+      const leafMat = new THREE.MeshLambertMaterial({ color: 0x2d6b1e });
+      const trunkIM = new THREE.InstancedMesh(trunkGeo, trunkMat, maxT);
+      const leafIM = new THREE.InstancedMesh(leafGeo, leafMat, maxT);
+      trunkIM.castShadow = true; leafIM.castShadow = true;
+      const mat4 = new THREE.Matrix4();
+      for (let i = 0; i < maxT; i++) {
+        const t = treePos[i];
+        mat4.makeScale(t.s, t.s, t.s);
+        mat4.setPosition(t.x, t.y + 1.1*t.s, t.z);
+        trunkIM.setMatrixAt(i, mat4);
+        mat4.setPosition(t.x, t.y + 2.8*t.s, t.z);
+        leafIM.setMatrixAt(i, mat4);
+      }
+      scene3D.add(trunkIM);
+      scene3D.add(leafIM);
+    }
+  }
+
+  // ── Rocks (InstancedMesh) ──
+  if (config.placeRocks) {
+    const p5 = new Perlin(config.seed + config.rockSeed);
+    const rockPos = [];
+    for (let iy = 0; iy < RES; iy += 4) {
+      for (let ix = 0; ix < RES; ix += 4) {
+        const h = heights[iy*RES + ix];
+        if (h > config.waterLevel+0.02 && h < 0.9) {
+          const nx = ix/RES, ny = iy/RES;
+          const rn = p5.noise(nx*80*0.15, ny*80*0.15);
+          if (rn > (1 - config.rockDensity*40)) {
+            rockPos.push({
+              x: (ix/RES-0.5)*WORLD,
+              y: h*HEIGHT_SCALE,
+              z: (iy/RES-0.5)*WORLD,
+              s: 0.4 + Math.random()*0.7
+            });
+          }
+        }
+      }
+    }
+    if (rockPos.length > 0) {
+      const maxR = Math.min(rockPos.length, 500);
+      const rockGeo = new THREE.IcosahedronGeometry(0.7, 0);
+      const rockMat = new THREE.MeshLambertMaterial({ color: 0x7a7a7a });
+      const rockIM = new THREE.InstancedMesh(rockGeo, rockMat, maxR);
+      rockIM.castShadow = true;
+      const mat4 = new THREE.Matrix4();
+      for (let i = 0; i < maxR; i++) {
+        const r = rockPos[i];
+        mat4.makeScale(r.s, r.s*0.7, r.s);
+        mat4.setPosition(r.x, r.y + 0.2, r.z);
+        rockIM.setMatrixAt(i, mat4);
+      }
+      scene3D.add(rockIM);
+    }
+  }
+
+  // ── Grid helper (subtle) ──
+  const gridH = new THREE.GridHelper(WORLD, 20, 0x1a2233, 0x1a2233);
+  gridH.position.y = -0.5;
+  scene3D.add(gridH);
+
+  // ── Orbit controls ──
+  reset3DCamera();
+  init3DControls(container);
+
+  // ── Animate ──
+  function animate() {
+    animFrame3D = requestAnimationFrame(animate);
+    update3DCamera();
+    renderer3D.render(scene3D, camera3D);
+  }
+  animate();
+
+  // ── Resize ──
+  const ro = new ResizeObserver(() => {
+    if (!renderer3D || !camera3D) return;
+    const w = container.clientWidth, h = container.clientHeight;
+    if (w > 0 && h > 0) {
+      camera3D.aspect = w / h;
+      camera3D.updateProjectionMatrix();
+      renderer3D.setSize(w, h);
+    }
+  });
+  ro.observe(container);
+}
+
+function update3DCamera() {
+  if (!camera3D) return;
+  camera3D.position.x = orbit.targetX + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+  camera3D.position.y = orbit.targetY + orbit.radius * Math.cos(orbit.phi);
+  camera3D.position.z = orbit.targetZ + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+  camera3D.lookAt(orbit.targetX, orbit.targetY, orbit.targetZ);
+}
+
+function init3DControls(el) {
+  el.addEventListener('mousedown', e => {
+    orbit.dragging = true;
+    orbit.rightDrag = e.button === 2;
+    orbit.lastX = e.clientX; orbit.lastY = e.clientY;
+    e.preventDefault();
+  });
+  el.addEventListener('contextmenu', e => e.preventDefault());
+
+  const onMove = e => {
+    if (!orbit.dragging) return;
+    const dx = e.clientX - orbit.lastX, dy = e.clientY - orbit.lastY;
+    orbit.lastX = e.clientX; orbit.lastY = e.clientY;
+    if (orbit.rightDrag) {
+      // Pan
+      const sp = orbit.radius * 0.002;
+      const sinT = Math.sin(orbit.theta), cosT = Math.cos(orbit.theta);
+      orbit.targetX += (-dx * sinT - dy * cosT * Math.cos(orbit.phi)) * sp * 0.5;
+      orbit.targetZ += (dx * cosT - dy * sinT * Math.cos(orbit.phi)) * sp * 0.5;
+      orbit.targetY += dy * Math.sin(orbit.phi) * sp * 0.3;
+    } else {
+      orbit.theta -= dx * 0.006;
+      orbit.phi = Math.max(0.08, Math.min(Math.PI*0.48, orbit.phi - dy * 0.006));
+    }
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', () => { orbit.dragging = false; });
+
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    orbit.radius *= e.deltaY > 0 ? 1.08 : 0.92;
+    orbit.radius = Math.max(25, Math.min(700, orbit.radius));
+  }, { passive: false });
+
+  // Touch
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      orbit.dragging = true; orbit.rightDrag = false;
+      orbit.lastX = e.touches[0].clientX; orbit.lastY = e.touches[0].clientY;
+    } else if (e.touches.length === 2) {
+      orbit.lastTouchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    }
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && orbit.dragging) {
+      const dx = e.touches[0].clientX - orbit.lastX, dy = e.touches[0].clientY - orbit.lastY;
+      orbit.lastX = e.touches[0].clientX; orbit.lastY = e.touches[0].clientY;
+      orbit.theta -= dx * 0.006;
+      orbit.phi = Math.max(0.08, Math.min(Math.PI*0.48, orbit.phi - dy * 0.006));
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      if (Math.abs(dist - orbit.lastTouchDist) > 5) {
+        orbit.radius *= dist > orbit.lastTouchDist ? 0.95 : 1.05;
+        orbit.radius = Math.max(25, Math.min(700, orbit.radius));
+        orbit.lastTouchDist = dist;
+      }
+    }
+  }, { passive: true });
+  el.addEventListener('touchend', () => { orbit.dragging = false; });
 }
 </script>
 </body>
