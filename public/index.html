@@ -318,6 +318,10 @@ const PRESETS = {
   skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, urbanEnabled:false },
   city:     { name:'🏙️ Cidade', waterLevel:0, amplitude:0.08, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:false, placeRocks:false },
   suburb:   { name:'🏘️ Subúrbio', waterLevel:0, amplitude:0.06, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:true, placeRocks:false },
+  battleroyale: { name:'🔫 Battle Royale', waterLevel:0.15, amplitude:0.6, rivers:true, cavesEnabled:false, volcano:false, islandMode:true, placeTrees:true, placeRocks:true, urbanEnabled:false },
+  rpg:      { name:'⚔️ RPG', waterLevel:0.2, amplitude:0.55, rivers:true, cavesEnabled:true, volcano:false, islandMode:false, placeTrees:true, placeRocks:true, urbanEnabled:false },
+  obby:     { name:'🟩 Obby', waterLevel:0, amplitude:0.01, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:false, placeRocks:false, urbanEnabled:false },
+  tycoon:   { name:'💰 Tycoon', waterLevel:0, amplitude:0.04, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:false, placeRocks:false, urbanEnabled:false },
   custom:   { name:'⚙️ Custom' },
 };
 
@@ -491,6 +495,11 @@ function renderPreview() {
       if(gn>0.65)[r,g,b]=MAT_COLORS.LeafyGrass;
       else if(gn<0.3)[r,g,b]=MAT_COLORS.Ground;
       else [r,g,b]=MAT_COLORS.Grass;
+    }
+    else if(config.preset==='obby'){r=15;g=18;b=28;}
+    else if(config.preset==='tycoon'){
+      const gn=(p2.noise(sx*0.4,sy*0.4)+1)*0.5;
+      [r,g,b]=gn>0.55?MAT_COLORS.Grass:MAT_COLORS.LeafyGrass;
     }
     else if(h<config.waterLevel+0.04)[r,g,b]=MAT_COLORS.Sand;
     else if(h>0.88)[r,g,b]=MAT_COLORS.Snow;
@@ -771,6 +780,222 @@ function renderPreview() {
       }
     }
   }
+
+  // ═══ Genre Overlays ═══
+  if (config.preset==='battleroyale') drawBROverlay(ctx, W, H, getH);
+  else if (config.preset==='rpg') drawRPGOverlay(ctx, W, H, getH);
+  else if (config.preset==='obby') drawObbyOverlay(ctx, W, H);
+  else if (config.preset==='tycoon') drawTycoonOverlay(ctx, W, H);
+}
+
+// ═══ 🔫 Battle Royale Overlay ═══
+function drawBROverlay(ctx, W, H, getH) {
+  const pBR = new Perlin(config.seed + 3333);
+  const cx = W/2, cy = H/2;
+  ctx.save();
+
+  // Storm zone outer
+  ctx.strokeStyle = 'rgba(40,130,255,0.55)'; ctx.lineWidth = 2.5; ctx.setLineDash([10,5]);
+  ctx.beginPath(); ctx.arc(cx, cy, W*0.44, 0, Math.PI*2); ctx.stroke();
+  // Storm fill outside circle
+  ctx.globalAlpha = 0.12; ctx.fillStyle = '#2060ff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.arc(cx, cy, W*0.44, 0, Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+
+  // Safe zone inner
+  const soX = pBR.noise(0.5,0.2)*W*0.07, soY = pBR.noise(0.2,0.5)*H*0.07;
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2; ctx.setLineDash([6,4]);
+  ctx.beginPath(); ctx.arc(cx+soX, cy+soY, W*0.2, 0, Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Flight path
+  const fpA = pBR.noise(0.3,0.3)*Math.PI, fpR = W*0.48;
+  ctx.strokeStyle = 'rgba(255,55,55,0.55)'; ctx.lineWidth = 2.5; ctx.setLineDash([8,6]);
+  ctx.beginPath();
+  ctx.moveTo(cx+Math.cos(fpA)*fpR, cy+Math.sin(fpA)*fpR);
+  ctx.lineTo(cx-Math.cos(fpA)*fpR, cy-Math.sin(fpA)*fpR);
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = '14px sans-serif'; ctx.fillStyle = 'rgba(255,55,55,0.85)';
+  ctx.fillText('✈️', cx+Math.cos(fpA)*fpR*0.82-7, cy+Math.sin(fpA)*fpR*0.82+5);
+
+  // Loot markers
+  const tiers = [{t:0.72,c:'rgba(255,170,0,0.85)',s:5},{t:0.56,c:'rgba(170,50,255,0.75)',s:4},{t:0.42,c:'rgba(50,140,255,0.65)',s:3.5},{t:0.3,c:'rgba(180,180,180,0.45)',s:2.5}];
+  for (let lx=15;lx<W;lx+=28) for (let ly=15;ly<H;ly+=28) {
+    if(getH(lx,ly)<config.waterLevel) continue;
+    const ln=(pBR.noise(lx*0.08,ly*0.08)+1)*0.5;
+    for (const t of tiers) { if(ln>t.t){ ctx.fillStyle=t.c; ctx.fillRect(lx-t.s/2,ly-t.s/2,t.s,t.s); break; } }
+  }
+
+  // POI labels
+  const poiNames=['Porto Seguro','Cidade Alta','Fazenda','Vila Noturna','Complexo','Base Militar'];
+  ctx.font='bold 9px sans-serif'; ctx.textAlign='center';
+  for (let i=0;i<6;i++) {
+    const px=0.12+(pBR.noise(i*2.5,0.7)+1)*0.38, py=0.12+(pBR.noise(0.7,i*2.5)+1)*0.38;
+    if(getH(px*W,py*H)>config.waterLevel+0.05){
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(px*W-28,py*H-10,56,14);
+      ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillText(poiNames[i],px*W,py*H);
+    }
+  }
+  ctx.textAlign='start'; ctx.restore();
+}
+
+// ═══ ⚔️ RPG Overlay ═══
+function drawRPGOverlay(ctx, W, H, getH) {
+  const pR = new Perlin(config.seed + 4444);
+  ctx.save();
+
+  // Generate villages
+  const villages=[];
+  for (let i=0;i<6;i++) {
+    const vx=0.1+(pR.noise(i*3,0.5)+1)*0.4, vy=0.1+(pR.noise(0.5,i*3)+1)*0.4;
+    const h=getH(vx*W,vy*H);
+    if(h>config.waterLevel+0.05&&h<0.7) villages.push({x:vx*W,y:vy*H,s:12+Math.abs(pR.noise(i,i))*16});
+  }
+
+  // Roads connecting nearest villages
+  ctx.strokeStyle='rgba(140,115,70,0.55)'; ctx.lineWidth=3.5;
+  const connected=new Set();
+  for (let i=0;i<villages.length;i++) {
+    let minD=Infinity,near=-1;
+    for(let j=0;j<villages.length;j++){if(i===j||connected.has(i+'-'+j))continue;const d=Math.hypot(villages[i].x-villages[j].x,villages[i].y-villages[j].y);if(d<minD){minD=d;near=j;}}
+    if(near>=0){connected.add(i+'-'+near);connected.add(near+'-'+i);
+      const mx=(villages[i].x+villages[near].x)/2+pR.noise(i*5,near*5)*25;
+      const my=(villages[i].y+villages[near].y)/2+pR.noise(near*5,i*5)*25;
+      ctx.beginPath(); ctx.moveTo(villages[i].x,villages[i].y); ctx.quadraticCurveTo(mx,my,villages[near].x,villages[near].y); ctx.stroke();
+    }
+  }
+
+  // Village buildings
+  const vNames=['Vila Início','Aldeia Norte','Porto Real','Vila Floresta','Mercado','Vilarejo'];
+  villages.forEach((v,vi)=>{
+    const n=4+Math.floor(v.s/5);
+    for(let h=0;h<n;h++){
+      const hx=v.x+(pR.noise(vi*10+h,0)-0.5)*v.s*2, hy=v.y+(pR.noise(0,vi*10+h)-0.5)*v.s*2;
+      ctx.fillStyle='rgba(160,140,110,0.85)'; ctx.fillRect(hx,hy,6+Math.random()*4,5+Math.random()*3);
+      ctx.fillStyle='rgba(120,60,30,0.75)'; ctx.fillRect(hx-1,hy-1.5,8+Math.random()*4,2);
+    }
+    ctx.fillStyle='rgba(255,240,200,0.9)'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(vNames[vi]||'Vila',v.x,v.y-v.s-5); ctx.textAlign='start';
+  });
+
+  // Dungeons
+  for (let i=0;i<3;i++){
+    const dx=0.08+(pR.noise(i*7+20,0.3)+1)*0.42, dy=0.08+(pR.noise(0.3,i*7+20)+1)*0.42;
+    if(getH(dx*W,dy*H)>config.waterLevel+0.1){
+      const px=dx*W,py=dy*H;
+      ctx.fillStyle='rgba(20,10,30,0.75)'; ctx.beginPath(); ctx.arc(px,py,7,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(180,40,40,0.7)'; ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2); ctx.fill();
+      ctx.font='11px sans-serif'; ctx.fillText('💀',px-6,py-9);
+      ctx.fillStyle='rgba(200,180,160,0.8)'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center';
+      ctx.fillText(`Dungeon Lv.${i+1}`,px,py+15); ctx.textAlign='start';
+    }
+  }
+
+  // Mob zones
+  const mColors=['rgba(200,40,40,0.08)','rgba(40,40,200,0.08)','rgba(40,170,40,0.08)','rgba(180,170,40,0.08)'];
+  for(let i=0;i<4;i++){
+    const mx=(pR.noise(i*4+30,1)+0.5)*W,my=(pR.noise(1,i*4+30)+0.5)*H;
+    if(getH(mx,my)>config.waterLevel){
+      ctx.fillStyle=mColors[i]; ctx.beginPath(); ctx.arc(mx,my,40+i*8,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=mColors[i].replace('0.08','0.25'); ctx.lineWidth=1; ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ═══ 🟩 Obby Overlay ═══
+function drawObbyOverlay(ctx, W, H) {
+  const pO = new Perlin(config.seed + 5555);
+  const platforms=[];
+  const numP = 28 + Math.floor(Math.abs(pO.noise(0,0))*18);
+  let lx=W*0.06, ly=H*0.5;
+
+  for(let i=0;i<numP;i++){
+    const prog=i/numP, diff=0.5+prog*1.5;
+    const dx=14+Math.abs(pO.noise(i*2,0))*16*diff;
+    const dy=pO.noise(0,i*2)*28*diff;
+    const px=lx+dx, py=Math.max(25,Math.min(H-25,ly+dy));
+    const pw=Math.max(8,22-prog*12), ph=Math.max(4,8-prog*3);
+    if(px>W-15) break;
+    platforms.push({x:px,y:py,w:pw,h:ph}); lx=px; ly=py;
+  }
+
+  // Connection lines
+  ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1; ctx.setLineDash([3,4]);
+  for(let i=1;i<platforms.length;i++){
+    ctx.beginPath(); ctx.moveTo(platforms[i-1].x+platforms[i-1].w/2,platforms[i-1].y+platforms[i-1].h/2);
+    ctx.lineTo(platforms[i].x,platforms[i].y+platforms[i].h/2); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Platforms
+  const pColors=['#3fb950','#40c463','#58a6ff','#79c0ff','#f0883e','#f85149','#bc8cff','#ff7b72'];
+  platforms.forEach((p,i)=>{
+    const ci=Math.floor((i/platforms.length)*pColors.length)%pColors.length;
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(p.x+2,p.y+2,p.w,p.h);
+    ctx.fillStyle=pColors[ci]; ctx.fillRect(p.x,p.y,p.w,p.h);
+    ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.fillRect(p.x,p.y,p.w,2);
+    if(i>0&&i%6===0){ ctx.font='10px sans-serif'; ctx.fillStyle='rgba(255,220,0,0.9)'; ctx.fillText('🚩',p.x-1,p.y-5); }
+  });
+
+  // Start / Finish
+  if(platforms.length>1){
+    ctx.font='bold 10px sans-serif';
+    ctx.fillStyle='rgba(56,213,100,0.95)'; ctx.fillText('▶ START',platforms[0].x-5,platforms[0].y-10);
+    ctx.fillStyle='rgba(255,200,0,0.95)'; ctx.fillText('🏆 FINISH',platforms[platforms.length-1].x-12,platforms[platforms.length-1].y-10);
+  }
+
+  // Difficulty labels
+  ctx.fillStyle='rgba(255,255,255,0.25)'; ctx.font='9px sans-serif';
+  ctx.fillText('FÁCIL',W*0.08,H*0.06); ctx.fillText('MÉDIO',W*0.35,H*0.06);
+  ctx.fillText('DIFÍCIL',W*0.62,H*0.06); ctx.fillText('INSANO',W*0.85,H*0.06);
+}
+
+// ═══ 💰 Tycoon Overlay ═══
+function drawTycoonOverlay(ctx, W, H) {
+  const rows=3, cols=4, margin=16, roadW=8;
+  const plotW=(W-margin*2-roadW*(cols-1))/cols;
+  const plotH=(H-margin*2-roadW*(rows-1))/rows;
+  const cCol=Math.floor(cols/2), cRow=Math.floor(rows/2);
+
+  // Roads
+  ctx.fillStyle='rgb(60,60,68)';
+  for(let c=1;c<cols;c++){const rx=margin+c*plotW+(c-1)*roadW; ctx.fillRect(rx,0,roadW,H);}
+  for(let r=1;r<rows;r++){const ry=margin+r*plotH+(r-1)*roadW; ctx.fillRect(0,ry,W,roadW);}
+  // Road markings
+  ctx.fillStyle='rgba(200,180,60,0.3)';
+  for(let c=1;c<cols;c++){const rx=margin+c*plotW+(c-1)*roadW+roadW/2;for(let y=0;y<H;y+=10)ctx.fillRect(rx,y,1,5);}
+  for(let r=1;r<rows;r++){const ry=margin+r*plotH+(r-1)*roadW+roadW/2;for(let x=0;x<W;x+=10)ctx.fillRect(x,ry,5,1);}
+
+  // Plots
+  const pColors=['rgba(90,170,90,0.25)','rgba(90,140,190,0.25)','rgba(190,140,90,0.25)','rgba(170,90,170,0.25)'];
+  ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+  let plotNum=0;
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const px=margin+c*(plotW+roadW), py=margin+r*(plotH+roadW);
+    plotNum++;
+    // Central spawn
+    if(r===cRow&&c===cCol){
+      ctx.fillStyle='rgba(88,166,255,0.18)'; ctx.fillRect(px,py,plotW,plotH);
+      ctx.strokeStyle='rgba(88,166,255,0.5)'; ctx.lineWidth=2; ctx.strokeRect(px+3,py+3,plotW-6,plotH-6);
+      ctx.fillStyle='rgba(88,166,255,0.9)'; ctx.fillText('🏪 SPAWN / LOJA',px+plotW/2,py+plotH/2);
+      ctx.font='9px sans-serif'; ctx.fillStyle='rgba(88,166,255,0.6)'; ctx.fillText('Área compartilhada',px+plotW/2,py+plotH/2+14);
+      ctx.font='bold 11px sans-serif'; continue;
+    }
+    // Plot
+    ctx.fillStyle=pColors[plotNum%4]; ctx.fillRect(px,py,plotW,plotH);
+    ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.strokeRect(px+4,py+4,plotW-8,plotH-8); ctx.setLineDash([]);
+    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillText(`Lote ${plotNum}`,px+plotW/2,py+plotH/2-4);
+    // House placeholder
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.fillRect(px+plotW/2-10,py+plotH/2+8,20,14);
+    ctx.fillStyle='rgba(255,255,255,0.2)';
+    ctx.fillRect(px+plotW/2-12,py+plotH/2+6,24,3);
+  }
+  ctx.textAlign='start';
 }
 
 // ═══ Tabs ═══
@@ -1180,6 +1405,10 @@ function render3DPreview() {
         if(gn>0.65)[r,g,b]=MAT_COLORS.LeafyGrass;
         else if(gn<0.3)[r,g,b]=MAT_COLORS.Ground;
         else [r,g,b]=MAT_COLORS.Grass;
+      } else if (config.preset==='obby') { r=15;g=18;b=28; }
+      else if (config.preset==='tycoon') {
+        const gn=(p2.noise(sx*0.4,sy*0.4)+1)*0.5;
+        [r,g,b]=gn>0.55?MAT_COLORS.Grass:MAT_COLORS.LeafyGrass;
       } else if (h < config.waterLevel+0.04) { [r,g,b] = MAT_COLORS.Sand; }
       else if (h > 0.88) { [r,g,b] = MAT_COLORS.Snow; }
       else if (h > 0.78) { const t=(h-0.78)/0.1; [r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0); }
@@ -1461,6 +1690,100 @@ function render3DPreview() {
             scene3D.add(win);
           }
         });
+      }
+    }
+  }
+
+  // ── Genre 3D Elements ──
+  if (config.preset==='obby') {
+    // Sky background for obby
+    scene3D.background = new THREE.Color(0x1a2a4a);
+    scene3D.fog = new THREE.FogExp2(0x1a2a4a, 0.001);
+    // Hide terrain
+    terrain.visible = false;
+    // Floating platforms
+    const pO=new Perlin(config.seed+5555);
+    const platColors=[0x3fb950,0x40c463,0x58a6ff,0x79c0ff,0xf0883e,0xf85149,0xbc8cff,0xff7b72];
+    const numP=28+Math.floor(Math.abs(pO.noise(0,0))*18);
+    let lx=-WORLD*0.44,ly=0,lz=10;
+    const platBoxGeo=new THREE.BoxGeometry(1,1,1);
+    for(let i=0;i<numP;i++){
+      const prog=i/numP, diff=0.5+prog*1.5;
+      const dx=6+Math.abs(pO.noise(i*2,0))*8*diff;
+      const dy=pO.noise(0,i*2)*6*diff;
+      const dz=pO.noise(i*3,i)*4*diff;
+      lx+=dx; ly=Math.max(-WORLD*0.4,Math.min(WORLD*0.4,ly+dy)); lz+=dz;
+      if(lx>WORLD*0.44) break;
+      const pw=Math.max(3.5,9-prog*5), ph=1.5, pd=Math.max(3,7-prog*3);
+      const ci=Math.floor(prog*platColors.length)%platColors.length;
+      const pMat=new THREE.MeshLambertMaterial({color:platColors[ci]});
+      const pm=new THREE.Mesh(platBoxGeo,pMat);
+      pm.scale.set(pw,ph,pd); pm.position.set(lx,10+Math.sin(i*0.7)*5,ly);
+      pm.castShadow=true; pm.receiveShadow=true; scene3D.add(pm);
+      // Checkpoint flags
+      if(i>0&&i%6===0){
+        const flagGeo=new THREE.CylinderGeometry(0.1,0.1,3,4);
+        const flagM=new THREE.Mesh(flagGeo,new THREE.MeshLambertMaterial({color:0xffdd00}));
+        flagM.position.set(lx,10+Math.sin(i*0.7)*5+ph/2+1.5,ly);
+        scene3D.add(flagM);
+      }
+    }
+  }
+
+  if (config.preset==='tycoon') {
+    const tRows=3,tCols=4,tRoadW=WORLD*0.03;
+    const tPlotW=(WORLD-tRoadW*(tCols-1))/tCols;
+    const tPlotH=(WORLD-tRoadW*(tRows-1))/tRows;
+    const tStreetMat=new THREE.MeshLambertMaterial({color:0x3c3c44});
+    const tAvgY=config.amplitude*HEIGHT_SCALE*0.5+0.3;
+    for(let c=1;c<tCols;c++){
+      const rx=(c*(tPlotW+tRoadW)-tRoadW/2)-WORLD/2;
+      const sg=new THREE.BoxGeometry(tRoadW,0.3,WORLD);
+      const sm=new THREE.Mesh(sg,tStreetMat); sm.position.set(rx,tAvgY,0); scene3D.add(sm);
+    }
+    for(let r=1;r<tRows;r++){
+      const ry=(r*(tPlotH+tRoadW)-tRoadW/2)-WORLD/2;
+      const sg=new THREE.BoxGeometry(WORLD,0.3,tRoadW);
+      const sm=new THREE.Mesh(sg,tStreetMat); sm.position.set(0,tAvgY,ry); scene3D.add(sm);
+    }
+    // Central spawn building
+    const cCol=Math.floor(tCols/2),cRow=Math.floor(tRows/2);
+    const scx=(cCol*(tPlotW+tRoadW)+tPlotW/2)-WORLD/2;
+    const scz=(cRow*(tPlotH+tRoadW)+tPlotH/2)-WORLD/2;
+    const shopGeo=new THREE.BoxGeometry(tPlotW*0.5,6,tPlotH*0.5);
+    const shopM=new THREE.Mesh(shopGeo,new THREE.MeshLambertMaterial({color:0x5588cc}));
+    shopM.position.set(scx,tAvgY+3,scz); shopM.castShadow=true; scene3D.add(shopM);
+  }
+
+  if (config.preset==='battleroyale') {
+    // Zone ring
+    const ringGeo=new THREE.RingGeometry(WORLD*0.43,WORLD*0.45,64);
+    ringGeo.rotateX(-Math.PI/2);
+    const ringMat=new THREE.MeshBasicMaterial({color:0x2880ff,transparent:true,opacity:0.3,side:THREE.DoubleSide});
+    const ring=new THREE.Mesh(ringGeo,ringMat);
+    ring.position.y=config.waterLevel*HEIGHT_SCALE+5; scene3D.add(ring);
+  }
+
+  if (config.preset==='rpg') {
+    // Village buildings
+    const pR=new Perlin(config.seed+4444);
+    const vilBoxGeo=new THREE.BoxGeometry(1,1,1);
+    const vilMat=new THREE.MeshLambertMaterial({color:0xa08c6e});
+    const roofMat=new THREE.MeshLambertMaterial({color:0x783c1e});
+    for(let i=0;i<6;i++){
+      const vx=0.1+(pR.noise(i*3,0.5)+1)*0.4, vy=0.1+(pR.noise(0.5,i*3)+1)*0.4;
+      const h=getTerrainHeight(vx,vy,p1);
+      if(h>config.waterLevel+0.05&&h<0.7){
+        const wx=(vx-0.5)*WORLD, wz=(vy-0.5)*WORLD, baseY=h*HEIGHT_SCALE;
+        const n=4+Math.floor(Math.abs(pR.noise(i,i))*5);
+        for(let j=0;j<n;j++){
+          const hx=wx+(pR.noise(i*10+j,0)-0.5)*16, hz=wz+(pR.noise(0,i*10+j)-0.5)*16;
+          const bw=2.5+Math.random()*1.5, bh=2+Math.random()*1.5, bd=2.5+Math.random()*1.5;
+          const vm=new THREE.Mesh(vilBoxGeo,vilMat);
+          vm.scale.set(bw,bh,bd); vm.position.set(hx,baseY+bh/2,hz); vm.castShadow=true; scene3D.add(vm);
+          const rm=new THREE.Mesh(vilBoxGeo,roofMat);
+          rm.scale.set(bw+0.5,0.6,bd+0.5); rm.position.set(hx,baseY+bh+0.3,hz); scene3D.add(rm);
+        }
       }
     }
   }
