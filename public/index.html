@@ -193,11 +193,47 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
     <div class="section">
       <div class="section-title">Features</div>
       <div class="toggle-row"><span>🏝️ Modo Ilha</span><button class="toggle on" id="togIslandMode" onclick="toggleFeature('islandMode', this)"></button></div>
-      <div class="toggle-row"><span>🌊 Rios</span><button class="toggle on" id="togRivers" onclick="toggleFeature('rivers', this)"></button></div>
-      <div class="toggle-row"><span>🕳️ Cavernas</span><button class="toggle" id="togCavesEnabled" onclick="toggleFeature('cavesEnabled', this)"></button></div>
+      <div class="toggle-row"><span>🌊 Rios</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn-dice" onclick="randomFeature('riverSeed')" title="Randomizar padrão">🎲</button>
+          <button class="toggle on" id="togRivers" onclick="toggleFeature('rivers', this)"></button>
+        </div>
+      </div>
+      <div class="toggle-row"><span>🕳️ Cavernas</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn-dice" onclick="randomFeature('caveSeed')" title="Randomizar padrão">🎲</button>
+          <button class="toggle" id="togCavesEnabled" onclick="toggleFeature('cavesEnabled', this)"></button>
+        </div>
+      </div>
+      <div id="caveOptions" style="display:none;padding:0 0 8px 20px">
+        <label class="label" id="lblCaveThreshold">Densidade cavernas: 0.65</label>
+        <input type="range" style="accent-color:var(--accent);width:100%" min="0.4" max="0.85" step="0.05" value="0.65" oninput="config.caveThreshold=+this.value;document.getElementById('lblCaveThreshold').textContent='Densidade cavernas: '+this.value;renderPreview()">
+      </div>
       <div class="toggle-row"><span>🌋 Vulcão</span><button class="toggle" id="togVolcano" onclick="toggleFeature('volcano', this)"></button></div>
-      <div class="toggle-row"><span>🌳 Árvores</span><button class="toggle on" id="togPlaceTrees" onclick="toggleFeature('placeTrees', this)"></button></div>
-      <div class="toggle-row"><span>🪨 Pedras</span><button class="toggle on" id="togPlaceRocks" onclick="toggleFeature('placeRocks', this)"></button></div>
+      <div class="toggle-row"><span>🌳 Árvores</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn-dice" onclick="randomFeature('treeSeed')" title="Randomizar padrão">🎲</button>
+          <button class="toggle on" id="togPlaceTrees" onclick="toggleFeature('placeTrees', this)"></button>
+        </div>
+      </div>
+      <div id="treeOptions" style="display:block;padding:0 0 8px 20px">
+        <label class="label" id="lblTreeDensity">Densidade: 0.020</label>
+        <input type="range" id="cfgTreeDensity" style="accent-color:#3fb950;width:100%" min="0.001" max="0.08" step="0.002" value="0.02" oninput="config.treeDensity=+this.value;document.getElementById('lblTreeDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
+      </div>
+      <div class="toggle-row"><span>🪨 Pedras</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn-dice" onclick="randomFeature('rockSeed')" title="Randomizar padrão">🎲</button>
+          <button class="toggle on" id="togPlaceRocks" onclick="toggleFeature('placeRocks', this)"></button>
+        </div>
+      </div>
+      <div id="rockOptions" style="display:block;padding:0 0 8px 20px">
+        <label class="label" id="lblRockDensity">Densidade: 0.005</label>
+        <input type="range" id="cfgRockDensity" style="accent-color:#8b949e;width:100%" min="0.001" max="0.03" step="0.001" value="0.005" oninput="config.rockDensity=+this.value;document.getElementById('lblRockDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
+      </div>
+    </div>
+
+    <div class="section" style="text-align:center;padding:4px 0">
+      <button class="btn-dice" onclick="randomAllFeatures()" style="width:100%;padding:8px;font-size:12px;background:var(--bg);border:1px dashed var(--border)">🎲 Randomizar tudo (terreno + features)</button>
     </div>
 
     <div class="section">
@@ -237,6 +273,8 @@ let config = {
   caveThreshold: 0.65, rivers: true, volcano: false, islandMode: true,
   placeTrees: true, treeDensity: 0.02, placeRocks: true, rockDensity: 0.005,
   lighting: 'tropical',
+  // Seeds individuais por feature (permite randomizar cada um separado)
+  treeSeed: 7777, rockSeed: 8888, caveSeed: 9999, riverSeed: 333,
 };
 
 let generatedLua = '';
@@ -248,7 +286,7 @@ const PRESETS = {
   medieval: { name:'🏰 Medieval', waterLevel:0.25, amplitude:0.6, rivers:true, cavesEnabled:true, volcano:false, islandMode:false },
   volcanic: { name:'🌋 Vulcânico', waterLevel:0.1, amplitude:0.9, rivers:false, cavesEnabled:true, volcano:true, islandMode:true },
   arctic:   { name:'❄️ Ártico', waterLevel:0.2, amplitude:0.65, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
-  desert:   { name:'🏜️ Deserto', waterLevel:0.08, amplitude:0.4, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
+  desert:   { name:'🏜️ Deserto', waterLevel:0.05, amplitude:0.55, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true },
   custom:   { name:'⚙️ Custom' },
 };
@@ -347,10 +385,29 @@ function updateSlider(key, el) {
 function toggleFeature(key, btn) {
   config[key] = !config[key];
   btn.className = 'toggle' + (config[key] ? ' on' : '');
+  // Mostrar/esconder opções
+  const optMap = { placeTrees:'treeOptions', placeRocks:'rockOptions', cavesEnabled:'caveOptions' };
+  if (optMap[key]) {
+    const el = document.getElementById(optMap[key]);
+    if (el) el.style.display = config[key] ? 'block' : 'none';
+  }
   renderPreview();
 }
 function randomSeed() {
   config.seed = Math.floor(Math.random() * 99999);
+  document.getElementById('cfgSeed').value = config.seed;
+  renderPreview();
+}
+function randomFeature(seedKey) {
+  config[seedKey] = Math.floor(Math.random() * 99999);
+  renderPreview();
+}
+function randomAllFeatures() {
+  config.seed = Math.floor(Math.random() * 99999);
+  config.treeSeed = Math.floor(Math.random() * 99999);
+  config.rockSeed = Math.floor(Math.random() * 99999);
+  config.caveSeed = Math.floor(Math.random() * 99999);
+  config.riverSeed = Math.floor(Math.random() * 99999);
   document.getElementById('cfgSeed').value = config.seed;
   renderPreview();
 }
@@ -388,8 +445,33 @@ function renderPreview() {
     else if(h>0.88)[r,g,b]=MAT_COLORS.Snow;
     else if(h>0.78){const t=(h-0.78)/0.1;[r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0);}
     else if(h>0.68)[r,g,b]=MAT_COLORS.Rock;
-    else if(config.preset==='desert')[r,g,b]=h>0.5?MAT_COLORS.Sandstone:MAT_COLORS.Sand;
-    else if(config.preset==='arctic')[r,g,b]=h>0.5?MAT_COLORS.Ice:MAT_COLORS.Snow;
+    else if(config.preset==='desert'){
+      // Dunas com noise extra para variação
+      const duneN = (p3.noise(sx*1.5, sy*1.5)+1)*0.5;
+      const erosion = (p2.noise(sx*0.8, sy*0.8)+1)*0.5;
+      // Oásis — pequenas manchas verdes/água
+      const oasisN = p3.noise(sx*0.2, sy*0.2);
+      if(oasisN > 0.42) { [r,g,b] = oasisN > 0.47 ? MAT_COLORS.Water : [80, 110, 50]; }
+      // Mesas rochosas em altitudes altas
+      else if(h>0.55) { [r,g,b] = MAT_COLORS.Sandstone; }
+      // Cascalho/terra nas encostas
+      else if(erosion > 0.65 && h > 0.3) { [r,g,b] = MAT_COLORS.Ground; }
+      // Dunas — variação de tom na areia
+      else {
+        const shade = 0.85 + duneN * 0.3;
+        r = Math.floor(MAT_COLORS.Sand[0] * shade);
+        g = Math.floor(MAT_COLORS.Sand[1] * shade);
+        b = Math.floor(MAT_COLORS.Sand[2] * shade);
+      }
+    }
+    else if(config.preset==='arctic'){
+      // Ártico mais variado
+      const iceN = (p3.noise(sx*0.6, sy*0.6)+1)*0.5;
+      if(h>0.6) [r,g,b] = MAT_COLORS.Glacier;
+      else if(iceN > 0.6) [r,g,b] = MAT_COLORS.Ice;
+      else if(iceN < 0.3 && h > 0.35) [r,g,b] = MAT_COLORS.Rock;
+      else [r,g,b] = MAT_COLORS.Snow;
+    }
     else if(config.volcano&&h>0.6)[r,g,b]=MAT_COLORS.CrackedLava;
     else if(temp>0.65)[r,g,b]=MAT_COLORS.Sand;
     else if(temp<0.35)[r,g,b]=MAT_COLORS.LeafyGrass;
@@ -400,9 +482,9 @@ function renderPreview() {
   ctx.putImageData(img,0,0);
 
   // ═══ OVERLAYS: árvores, pedras, cavernas, vulcão ═══
-  const p4 = new Perlin(config.seed + 7777);
-  const p5 = new Perlin(config.seed + 8888);
-  const p6 = new Perlin(config.seed + 9999);
+  const p4 = new Perlin(config.seed + config.treeSeed);
+  const p5 = new Perlin(config.seed + config.rockSeed);
+  const p6 = new Perlin(config.seed + config.caveSeed);
 
   // Função helper pra calcular altura num ponto
   function getH(px, py) {
