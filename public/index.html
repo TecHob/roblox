@@ -316,8 +316,8 @@ const PRESETS = {
   arctic:   { name:'❄️ Ártico', waterLevel:0.2, amplitude:0.65, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   desert:   { name:'🏜️ Deserto', waterLevel:0.05, amplitude:0.55, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, urbanEnabled:false },
-  city:     { name:'🏙️ Cidade', waterLevel:0.08, amplitude:0.18, rivers:true, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:false, placeRocks:false },
-  suburb:   { name:'🏘️ Subúrbio', waterLevel:0.05, amplitude:0.12, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:true, placeRocks:false },
+  city:     { name:'🏙️ Cidade', waterLevel:0, amplitude:0.08, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:false, placeRocks:false },
+  suburb:   { name:'🏘️ Subúrbio', waterLevel:0, amplitude:0.06, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:true, placeRocks:false },
   custom:   { name:'⚙️ Custom' },
 };
 
@@ -486,6 +486,12 @@ function renderPreview() {
     let r,g,b;
     const temp=(p2.noise(sx*0.3,sy*0.3)+1)*0.5;
     if(h<config.waterLevel){const dp=1-h/config.waterLevel;r=12-dp*8|0;g=84-dp*40|0;b=92+dp*30|0;}
+    else if(config.urbanEnabled){
+      const gn=(p2.noise(sx*0.5,sy*0.5)+1)*0.5;
+      if(gn>0.65)[r,g,b]=MAT_COLORS.LeafyGrass;
+      else if(gn<0.3)[r,g,b]=MAT_COLORS.Ground;
+      else [r,g,b]=MAT_COLORS.Grass;
+    }
     else if(h<config.waterLevel+0.04)[r,g,b]=MAT_COLORS.Sand;
     else if(h>0.88)[r,g,b]=MAT_COLORS.Snow;
     else if(h>0.78){const t=(h-0.78)/0.1;[r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0);}
@@ -677,7 +683,7 @@ function renderPreview() {
 
         // Pular água
         const midH = getH(x0 + bW/2, y0 + bH/2);
-        if (midH < config.waterLevel + 0.02) continue;
+        if (config.waterLevel > 0 && midH < config.waterLevel + 0.02) continue;
 
         const n1 = pU.noise(bx*0.8, by*0.8);
         const n2 = pU.noise(bx*1.5+100, by*1.5);
@@ -1169,6 +1175,11 @@ function render3DPreview() {
       if (h < config.waterLevel) {
         const dp = 1 - h/config.waterLevel;
         r = 12-dp*8|0; g = 84-dp*40|0; b = 92+dp*30|0;
+      } else if (config.urbanEnabled) {
+        const gn=(p2.noise(sx*0.5,sy*0.5)+1)*0.5;
+        if(gn>0.65)[r,g,b]=MAT_COLORS.LeafyGrass;
+        else if(gn<0.3)[r,g,b]=MAT_COLORS.Ground;
+        else [r,g,b]=MAT_COLORS.Grass;
       } else if (h < config.waterLevel+0.04) { [r,g,b] = MAT_COLORS.Sand; }
       else if (h > 0.88) { [r,g,b] = MAT_COLORS.Snow; }
       else if (h > 0.78) { const t=(h-0.78)/0.1; [r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0); }
@@ -1350,17 +1361,27 @@ function render3DPreview() {
 
     // Street grid on terrain
     const streetMat = new THREE.MeshLambertMaterial({ color: 0x3c3c44 });
+    // Compute average terrain height for street level
+    let avgH = 0, avgCount = 0;
+    for (let i = 0; i < gridN+1; i++) {
+      for (let j = 0; j < gridN+1; j++) {
+        avgH += getTerrainHeight(i/gridN, j/gridN, p1);
+        avgCount++;
+      }
+    }
+    const streetY = (avgH / avgCount) * HEIGHT_SCALE + 0.25;
+
     for (let i = 1; i < gridN; i++) {
       const pos3 = (i / gridN - 0.5) * WORLD;
       // X streets
-      const sxGeo = new THREE.BoxGeometry(sw3D, 0.15, WORLD);
+      const sxGeo = new THREE.BoxGeometry(sw3D, 0.3, WORLD);
       const sx = new THREE.Mesh(sxGeo, streetMat);
-      sx.position.set(pos3, config.waterLevel * HEIGHT_SCALE + 0.3, 0);
+      sx.position.set(pos3, streetY, 0);
       scene3D.add(sx);
       // Z streets
-      const szGeo = new THREE.BoxGeometry(WORLD, 0.15, sw3D);
+      const szGeo = new THREE.BoxGeometry(WORLD, 0.3, sw3D);
       const sz = new THREE.Mesh(szGeo, streetMat);
-      sz.position.set(0, config.waterLevel * HEIGHT_SCALE + 0.3, pos3);
+      sz.position.set(0, streetY, pos3);
       scene3D.add(sz);
     }
 
@@ -1369,7 +1390,7 @@ function render3DPreview() {
       for (let bz = 0; bz < gridN; bz++) {
         const nx = (bx + 0.5) / gridN, nz = (bz + 0.5) / gridN;
         const h = getTerrainHeight(nx, nz, p1);
-        if (h < config.waterLevel + 0.02) continue;
+        if (config.waterLevel > 0 && h < config.waterLevel + 0.02) continue;
         const n1 = pU.noise(bx*0.8, bz*0.8);
         const n2 = pU.noise(bx*1.5+100, bz*1.5);
         const cx = nx - 0.5, cz = nz - 0.5;
