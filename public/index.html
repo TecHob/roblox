@@ -241,6 +241,20 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
         <label class="label" id="lblRockDensity">Densidade: 0.005</label>
         <input type="range" id="cfgRockDensity" style="accent-color:#8b949e;width:100%" min="0.001" max="0.03" step="0.001" value="0.005" oninput="config.rockDensity=+this.value;document.getElementById('lblRockDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
       </div>
+      <div class="toggle-row"><span>🏙️ Construções</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="btn-dice" onclick="randomFeature('buildingSeed')" title="Randomizar layout">🎲</button>
+          <button class="toggle" id="togUrbanEnabled" onclick="toggleFeature('urbanEnabled', this)"></button>
+        </div>
+      </div>
+      <div id="urbanOptions" style="display:none;padding:0 0 8px 20px">
+        <label class="label" id="lblBlockSize">Tamanho do bloco: 42</label>
+        <input type="range" style="accent-color:var(--accent);width:100%" min="24" max="80" step="2" value="42" oninput="config.blockSize=+this.value;document.getElementById('lblBlockSize').textContent='Tamanho do bloco: '+this.value;renderPreview()">
+        <label class="label" id="lblBuildingDensity">Densidade construções: 0.70</label>
+        <input type="range" style="accent-color:var(--orange);width:100%" min="0.2" max="1" step="0.05" value="0.7" oninput="config.buildingDensity=+this.value;document.getElementById('lblBuildingDensity').textContent='Densidade construções: '+parseFloat(this.value).toFixed(2);renderPreview()">
+        <label class="label" id="lblParkFrequency">Frequência parques: 0.15</label>
+        <input type="range" style="accent-color:var(--green);width:100%" min="0" max="0.4" step="0.05" value="0.15" oninput="config.parkFrequency=+this.value;document.getElementById('lblParkFrequency').textContent='Frequência parques: '+parseFloat(this.value).toFixed(2);renderPreview()">
+      </div>
     </div>
 
     <div class="section" style="text-align:center;padding:4px 0">
@@ -283,6 +297,7 @@ let config = {
   mountainThreshold: 0.6, mountainAmplitude: 0.4, cavesEnabled: false,
   caveThreshold: 0.65, rivers: true, volcano: false, islandMode: true,
   placeTrees: true, treeDensity: 0.02, placeRocks: true, rockDensity: 0.005,
+  urbanEnabled: false, blockSize: 42, buildingDensity: 0.7, parkFrequency: 0.15, buildingSeed: 5555,
   lighting: 'tropical',
   // Seeds individuais por feature (permite randomizar cada um separado)
   treeSeed: 7777, rockSeed: 8888, caveSeed: 9999, riverSeed: 333,
@@ -300,7 +315,9 @@ const PRESETS = {
   volcanic: { name:'🌋 Vulcânico', waterLevel:0.1, amplitude:0.9, rivers:false, cavesEnabled:true, volcano:true, islandMode:true },
   arctic:   { name:'❄️ Ártico', waterLevel:0.2, amplitude:0.65, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   desert:   { name:'🏜️ Deserto', waterLevel:0.05, amplitude:0.55, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
-  skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true },
+  skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, urbanEnabled:false },
+  city:     { name:'🏙️ Cidade', waterLevel:0.08, amplitude:0.18, rivers:true, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:false, placeRocks:false },
+  suburb:   { name:'🏘️ Subúrbio', waterLevel:0.05, amplitude:0.12, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:true, placeRocks:false },
   custom:   { name:'⚙️ Custom' },
 };
 
@@ -365,7 +382,9 @@ function selectPreset(key) {
   if (key !== 'custom') {
     const p = PRESETS[key];
     Object.assign(config, { waterLevel:p.waterLevel, amplitude:p.amplitude, rivers:p.rivers??false,
-      cavesEnabled:p.cavesEnabled??false, volcano:p.volcano??false, islandMode:p.islandMode??false, lighting:key });
+      cavesEnabled:p.cavesEnabled??false, volcano:p.volcano??false, islandMode:p.islandMode??false,
+      urbanEnabled:p.urbanEnabled??false, placeTrees:p.placeTrees??true, placeRocks:p.placeRocks??true,
+      lighting:key });
     syncUI();
   }
   renderPresets();
@@ -377,9 +396,15 @@ function syncUI() {
   document.getElementById('cfgWaterLevel').value = config.waterLevel;
   document.getElementById('lblAmplitude').textContent = `Amplitude: ${config.amplitude.toFixed(2)}`;
   document.getElementById('lblWaterLevel').textContent = `Nível d'água: ${(config.waterLevel*100).toFixed(0)}%`;
-  ['islandMode','rivers','cavesEnabled','volcano','placeTrees','placeRocks'].forEach(k => {
+  ['islandMode','rivers','cavesEnabled','volcano','placeTrees','placeRocks','urbanEnabled'].forEach(k => {
     const btn = document.getElementById('tog' + k.charAt(0).toUpperCase() + k.slice(1));
     if(btn) btn.className = 'toggle' + (config[k] ? ' on' : '');
+  });
+  // Show/hide sub-option panels
+  const optMap = { placeTrees:'treeOptions', placeRocks:'rockOptions', cavesEnabled:'caveOptions', urbanEnabled:'urbanOptions' };
+  Object.entries(optMap).forEach(([k, id]) => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = config[k] ? 'block' : 'none';
   });
 }
 
@@ -399,7 +424,7 @@ function toggleFeature(key, btn) {
   config[key] = !config[key];
   btn.className = 'toggle' + (config[key] ? ' on' : '');
   // Mostrar/esconder opções
-  const optMap = { placeTrees:'treeOptions', placeRocks:'rockOptions', cavesEnabled:'caveOptions' };
+  const optMap = { placeTrees:'treeOptions', placeRocks:'rockOptions', cavesEnabled:'caveOptions', urbanEnabled:'urbanOptions' };
   if (optMap[key]) {
     const el = document.getElementById(optMap[key]);
     if (el) el.style.display = config[key] ? 'block' : 'none';
@@ -421,6 +446,7 @@ function randomAllFeatures() {
   config.rockSeed = Math.floor(Math.random() * 99999);
   config.caveSeed = Math.floor(Math.random() * 99999);
   config.riverSeed = Math.floor(Math.random() * 99999);
+  config.buildingSeed = Math.floor(Math.random() * 99999);
   document.getElementById('cfgSeed').value = config.seed;
   renderPreview();
 }
@@ -603,6 +629,138 @@ function renderPreview() {
             ctx.arc(px, py, size, 0, Math.PI * 2);
             ctx.fill();
           }
+        }
+      }
+    }
+  }
+
+  // 🏙️ Construções urbanas — grid de ruas + edifícios
+  if (config.urbanEnabled) {
+    const pU = new Perlin(config.buildingSeed || 5555);
+    const block = config.blockSize || 42;
+    const sw = Math.max(3, Math.floor(block * 0.13));
+    const swk = 1;
+    const gridCols = Math.ceil(W / block);
+    const gridRows = Math.ceil(H / block);
+
+    // Ruas
+    ctx.fillStyle = 'rgb(60, 60, 68)';
+    for (let i = 1; i < gridCols; i++) { ctx.fillRect(i * block - sw/2, 0, sw, H); }
+    for (let i = 1; i < gridRows; i++) { ctx.fillRect(0, i * block - sw/2, W, sw); }
+    // Calçadas
+    ctx.fillStyle = 'rgb(88, 86, 80)';
+    for (let i = 1; i < gridCols; i++) {
+      ctx.fillRect(i*block - sw/2 - swk, 0, swk, H);
+      ctx.fillRect(i*block + sw/2, 0, swk, H);
+    }
+    for (let i = 1; i < gridRows; i++) {
+      ctx.fillRect(0, i*block - sw/2 - swk, W, swk);
+      ctx.fillRect(0, i*block + sw/2, W, swk);
+    }
+    // Faixa central tracejada
+    ctx.fillStyle = 'rgba(200,180,80,0.35)';
+    for (let i = 1; i < gridCols; i++) {
+      for (let y = 0; y < H; y += 8) ctx.fillRect(i*block - 0.5, y, 1, 4);
+    }
+    for (let i = 1; i < gridRows; i++) {
+      for (let x = 0; x < W; x += 8) ctx.fillRect(x, i*block - 0.5, 4, 1);
+    }
+
+    // Blocos — edifícios, parques, casas
+    for (let bx = 0; bx < gridCols; bx++) {
+      for (let by = 0; by < gridRows; by++) {
+        const x0 = bx * block + (bx > 0 ? sw/2 + swk : 0) + 1;
+        const y0 = by * block + (by > 0 ? sw/2 + swk : 0) + 1;
+        const bW = block - sw - swk*2 - 2;
+        const bH = block - sw - swk*2 - 2;
+        if (bW < 6 || bH < 6) continue;
+
+        // Pular água
+        const midH = getH(x0 + bW/2, y0 + bH/2);
+        if (midH < config.waterLevel + 0.02) continue;
+
+        const n1 = pU.noise(bx*0.8, by*0.8);
+        const n2 = pU.noise(bx*1.5+100, by*1.5);
+        const cx = (x0 + bW/2)/W - 0.5, cy = (y0 + bH/2)/H - 0.5;
+        const distC = Math.sqrt(cx*cx + cy*cy);
+
+        // Parque
+        if ((n1+1)/2 > (1 - config.parkFrequency)) {
+          ctx.fillStyle = 'rgba(50,115,40,0.8)';
+          ctx.fillRect(x0, y0, bW, bH);
+          ctx.fillStyle = 'rgba(30,85,25,0.9)';
+          for (let t = 0; t < 6; t++) {
+            const tx = x0 + Math.abs(pU.noise(bx*7+t, by*7+t*3))*bW;
+            const ty = y0 + Math.abs(pU.noise(bx*7+t+50, by*7+t))*bH;
+            ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI*2); ctx.fill();
+          }
+          // Caminho no parque
+          ctx.strokeStyle = 'rgba(150,140,110,0.5)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x0, y0+bH/2); ctx.lineTo(x0+bW, y0+bH/2); ctx.stroke();
+          continue;
+        }
+
+        // Lote vazio (baixa densidade)
+        if ((n2+1)/2 > config.buildingDensity) {
+          ctx.fillStyle = 'rgba(85,80,55,0.4)';
+          ctx.fillRect(x0, y0, bW, bH);
+          continue;
+        }
+
+        // Downtown (centro)
+        if (distC < 0.15) {
+          const shade = 95 + Math.floor(Math.abs(n1) * 45);
+          ctx.fillStyle = `rgb(${shade},${shade+8},${shade+18})`;
+          ctx.fillRect(x0+1, y0+1, bW-2, bH-2);
+          // Janelas
+          ctx.fillStyle = 'rgba(170,200,255,0.25)';
+          for (let wx = x0+3; wx < x0+bW-2; wx += 3) {
+            for (let wy = y0+3; wy < y0+bH-2; wy += 3) {
+              ctx.fillRect(wx, wy, 1.5, 1.5);
+            }
+          }
+        }
+        // Comercial (anel intermediário)
+        else if (distC < 0.28) {
+          const cols = [[155,138,118],[140,128,122],[148,142,128],[130,118,108]];
+          const ci = Math.abs(Math.floor(n1*4))%4;
+          ctx.fillStyle = `rgb(${cols[ci]})`;
+          const numB = 2 + (n2 > 0 ? 1 : 0);
+          const sl = bW / numB;
+          for (let i = 0; i < numB; i++) {
+            ctx.fillRect(x0+i*sl+1, y0+1, sl-2, bH-2);
+          }
+          // Telhado (linha escura no topo)
+          ctx.fillStyle = `rgba(0,0,0,0.2)`;
+          for (let i = 0; i < numB; i++) { ctx.fillRect(x0+i*sl+1, y0+1, sl-2, 2); }
+        }
+        // Residencial (periferia — estilo Bloxburg)
+        else {
+          // Quintal
+          ctx.fillStyle = 'rgba(75,125,55,0.55)';
+          ctx.fillRect(x0, y0, bW, bH);
+          // Casa
+          const hW = Math.min(bW*0.55, 16);
+          const hH = Math.min(bH*0.5, 14);
+          const hx = x0 + (bW - hW) * ((n1+1)*0.3+0.2);
+          const hy = y0 + bH - hH - 2;
+          const hCols = [[175,158,138],[158,148,142],[168,152,132],[188,178,168],[152,138,128]];
+          const hci = Math.abs(Math.floor(n2*5))%5;
+          ctx.fillStyle = `rgb(${hCols[hci]})`;
+          ctx.fillRect(hx, hy, hW, hH);
+          // Telhado
+          ctx.fillStyle = `rgb(${hCols[hci][0]-45},${hCols[hci][1]-45},${hCols[hci][2]-35})`;
+          ctx.fillRect(hx, hy, hW, 2.5);
+          // Porta
+          ctx.fillStyle = 'rgba(80,60,40,0.8)';
+          ctx.fillRect(hx+hW/2-1.5, hy+hH-5, 3, 5);
+          // Janelas
+          ctx.fillStyle = 'rgba(160,200,240,0.5)';
+          ctx.fillRect(hx+3, hy+4, 3, 3);
+          if (hW > 12) ctx.fillRect(hx+hW-6, hy+4, 3, 3);
+          // Calçada até a rua
+          ctx.fillStyle = 'rgba(150,145,135,0.6)';
+          ctx.fillRect(hx+hW/2-1, hy+hH, 2, y0+bH-hy-hH);
         }
       }
     }
@@ -1178,6 +1336,111 @@ function render3DPreview() {
         rockIM.setMatrixAt(i, mat4);
       }
       scene3D.add(rockIM);
+    }
+  }
+
+  // ── Urban Buildings (3D) ──
+  if (config.urbanEnabled) {
+    const pU = new Perlin(config.buildingSeed || 5555);
+    const block = config.blockSize || 42;
+    const gridN = Math.ceil(512 / block);
+    const cellW = WORLD / gridN;
+    const sw3D = cellW * 0.13;
+    const buildings = [];
+
+    // Street grid on terrain
+    const streetMat = new THREE.MeshLambertMaterial({ color: 0x3c3c44 });
+    for (let i = 1; i < gridN; i++) {
+      const pos3 = (i / gridN - 0.5) * WORLD;
+      // X streets
+      const sxGeo = new THREE.BoxGeometry(sw3D, 0.15, WORLD);
+      const sx = new THREE.Mesh(sxGeo, streetMat);
+      sx.position.set(pos3, config.waterLevel * HEIGHT_SCALE + 0.3, 0);
+      scene3D.add(sx);
+      // Z streets
+      const szGeo = new THREE.BoxGeometry(WORLD, 0.15, sw3D);
+      const sz = new THREE.Mesh(szGeo, streetMat);
+      sz.position.set(0, config.waterLevel * HEIGHT_SCALE + 0.3, pos3);
+      scene3D.add(sz);
+    }
+
+    // Collect building positions
+    for (let bx = 0; bx < gridN; bx++) {
+      for (let bz = 0; bz < gridN; bz++) {
+        const nx = (bx + 0.5) / gridN, nz = (bz + 0.5) / gridN;
+        const h = getTerrainHeight(nx, nz, p1);
+        if (h < config.waterLevel + 0.02) continue;
+        const n1 = pU.noise(bx*0.8, bz*0.8);
+        const n2 = pU.noise(bx*1.5+100, bz*1.5);
+        const cx = nx - 0.5, cz = nz - 0.5;
+        const distC = Math.sqrt(cx*cx + cz*cz);
+        if ((n1+1)/2 > (1 - config.parkFrequency)) continue; // park
+        if ((n2+1)/2 > config.buildingDensity) continue; // empty
+
+        const wx = (nx - 0.5) * WORLD, wz = (nz - 0.5) * WORLD;
+        const baseY = h * HEIGHT_SCALE;
+        const footprint = cellW - sw3D*2 - 1;
+        if (footprint < 1) continue;
+
+        if (distC < 0.15) {
+          // Downtown — tall
+          const bldH = 8 + Math.abs(n1) * 18;
+          buildings.push({ x:wx, y:baseY+bldH/2, z:wz, w:footprint*0.85, h:bldH, d:footprint*0.85, color:0x5a6070 });
+        } else if (distC < 0.28) {
+          // Commercial — medium, split
+          const numB = 2 + (n2>0?1:0);
+          const slW = footprint / numB;
+          for (let i=0; i<numB; i++) {
+            const bH = 3 + Math.abs(pU.noise(bx+i*3,bz))*8;
+            const ox = wx - footprint/2 + slW*i + slW/2;
+            buildings.push({ x:ox, y:baseY+bH/2, z:wz, w:slW*0.8, h:bH, d:footprint*0.85, color:0x8a7a68 });
+          }
+        } else {
+          // Residential — small house
+          const bH = 2 + Math.abs(n2)*2.5;
+          buildings.push({ x:wx, y:baseY+bH/2, z:wz+footprint*0.12, w:footprint*0.5, h:bH, d:footprint*0.4, color:0xa09080 });
+        }
+      }
+    }
+
+    if (buildings.length > 0) {
+      // Group by type for instanced rendering
+      const boxGeo = new THREE.BoxGeometry(1,1,1);
+      const mat4b = new THREE.Matrix4();
+      const scale4 = new THREE.Matrix4();
+
+      const dtBuilds = buildings.filter(b=>b.color===0x5a6070);
+      const cmBuilds = buildings.filter(b=>b.color===0x8a7a68);
+      const rsBuilds = buildings.filter(b=>b.color===0xa09080);
+
+      const addInstanced = (arr, col) => {
+        if (!arr.length) return;
+        const im = new THREE.InstancedMesh(boxGeo, new THREE.MeshLambertMaterial({color:col}), arr.length);
+        im.castShadow = true; im.receiveShadow = true;
+        for (let i=0; i<arr.length; i++) {
+          const b = arr[i];
+          scale4.makeScale(b.w, b.h, b.d);
+          scale4.setPosition(b.x, b.y, b.z);
+          im.setMatrixAt(i, scale4);
+        }
+        scene3D.add(im);
+      };
+      addInstanced(dtBuilds, 0x5a6070);
+      addInstanced(cmBuilds, 0x8a7a68);
+      addInstanced(rsBuilds, 0xa09080);
+
+      // Windows on downtown buildings (emissive planes)
+      if (dtBuilds.length > 0) {
+        const winMat = new THREE.MeshBasicMaterial({ color: 0xaaccff, transparent:true, opacity:0.4 });
+        dtBuilds.slice(0, 30).forEach(b => {
+          for (let wy = b.y - b.h/2 + 2; wy < b.y + b.h/2 - 1; wy += 2.5) {
+            const winGeo = new THREE.PlaneGeometry(b.w*0.7, 1);
+            const win = new THREE.Mesh(winGeo, winMat);
+            win.position.set(b.x, wy, b.z + b.d/2 + 0.01);
+            scene3D.add(win);
+          }
+        });
+      }
     }
   }
 
