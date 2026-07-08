@@ -1087,6 +1087,9 @@ function showTab(id) {
     if (generatedHeightmap && config.generationMode === 'erosion') {
       const previewUrl = absoluteHeightmapUrl(generatedHeightmap.files.preview);
       const heightmapUrl = absoluteHeightmapUrl(generatedHeightmap.files.heightmap);
+      const colormapUrl = absoluteHeightmapUrl(generatedHeightmap.files.colormap);
+      const setupLuaUrl = absoluteHeightmapUrl(generatedHeightmap.files.setup_lua);
+      const packageUrl = absoluteHeightmapUrl(generatedHeightmap.files.package);
       const erosionNames = {light:'Leve',medium:'Média',strong:'Intensa',none:'Sem erosão'};
       body.innerHTML = `<div class="toolbar"><span>⛰️ Heightmap refinado · ${generatedHeightmap.seconds}s</span><button class="btn-copy" onclick="generatedHeightmap=null;showTab('preview')">↩ Voltar ao preview procedural</button></div>
         <div class="ai-result">
@@ -1098,20 +1101,23 @@ function showTab(id) {
             <div class="ai-meta-card">Água resultante<strong>${generatedHeightmap.stats.water_area_percent}%</strong></div>
           </div>
           <div class="ai-result-actions">
-            <button class="btn-copy" onclick="downloadHeightmap('${heightmapUrl}','heightmap_${generatedHeightmap.id}.png')">⬇️ Baixar heightmap 16-bit</button>
-            <button class="btn-copy" onclick="window.open('${previewUrl}','_blank')">🔍 Abrir preview colorido</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${heightmapUrl}','heightmap_${generatedHeightmap.id}.png')">⬇️ Heightmap 16-bit</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${colormapUrl}','colormap_${generatedHeightmap.id}.png')">🎨 Colormap</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${setupLuaUrl}','setup_world_${generatedHeightmap.id}.lua')">🌊 Script água + mundo</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${packageUrl}','map_package_${generatedHeightmap.id}.zip')">📦 Pacote completo</button>
+            <button class="btn-copy" onclick="window.open('${previewUrl}','_blank')">🔍 Abrir preview</button>
             <button class="btn-copy" onclick="generatedHeightmap=null;showTab('preview')">🗺️ Comparar com Perlin</button>
           </div>
           <div class="ai-status" style="text-align:center">Resolução: ${generatedHeightmap.terrain.resolution}×${generatedHeightmap.terrain.resolution} · Preset: ${generatedHeightmap.preset || config.preset}</div>
           <details class="import-guide">
             <summary>🎮 Como importar no Roblox Studio</summary>
             <ol>
-              <li>Baixe o arquivo pelo botão <strong>Baixar heightmap 16-bit</strong>.</li>
-              <li>No Roblox Studio, abra <strong>Home → Terrain → Editor</strong>.</li>
-              <li>Entre em <strong>Import</strong> e selecione o PNG baixado como Heightmap.</li>
-              <li>Defina o tamanho horizontal desejado e uma altura vertical compatível com a amplitude do mapa.</li>
-              <li>Confirme a importação, revise o nível da água e salve o projeto com <strong>Ctrl+S</strong>.</li>
-              <li>O preview colorido é apenas visual; importe sempre o PNG grayscale de 16 bits.</li>
+              <li>Baixe o <strong>Pacote completo</strong> ou os arquivos separadamente.</li>
+              <li>No Roblox Studio, abra <strong>Home → Terrain → Editor → Import</strong>.</li>
+              <li>Use o heightmap grayscale em <strong>Heightmap</strong> e o colormap em <strong>Colormap</strong>.</li>
+              <li>Para ${generatedHeightmap.terrain.resolution}×${generatedHeightmap.terrain.resolution}, use X/Z = ${generatedHeightmap.terrain.resolution*4} studs e Y = 256 studs.</li>
+              <li>Depois de importar, abra <strong>View → Command Bar</strong>, cole o arquivo <strong>setup_world.lua</strong> e execute fora do modo Play.</li>
+              <li>O script adiciona água sem apagar o relevo, cria spawn e decoração básica conforme as opções do mapa.</li>
             </ol>
           </details>
         </div>`;
@@ -1199,7 +1205,15 @@ async function generateMap() {
         volcano: config.volcano,
         erosion: config.erosion || 'medium',
         preset: config.preset || 'custom',
-        response: 'json'
+        response: 'json',
+        import_vertical_size: 256,
+        import_center_x: 0,
+        import_center_y: 0,
+        import_center_z: 0,
+        place_trees: !!config.placeTrees,
+        place_rocks: !!config.placeRocks,
+        tree_density: Number(config.treeDensity || 0.02),
+        rock_density: Number(config.rockDensity || 0.005)
       };
       const res = await fetch(HEIGHTMAP_API + '/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
