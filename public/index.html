@@ -50,6 +50,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .btn-generate:hover { transform: scale(1.02); }
 .btn-generate:disabled { background: var(--bg2); color: var(--text3); transform: none; cursor: default; }
 
+.ai-mode-card { border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--bg); }
+.ai-mode-options { display:grid; gap:7px; margin-top:8px; }
+.ai-mode-option { display:flex; gap:8px; align-items:flex-start; padding:8px; border:1px solid var(--border); border-radius:8px; cursor:pointer; }
+.ai-mode-option:has(input:checked) { border-color:var(--accent); background:rgba(88,166,255,.08); }
+.ai-mode-option input { margin-top:3px; accent-color:var(--accent); }
+.ai-beta { font-size:10px; padding:2px 6px; border-radius:999px; color:#fff; background:var(--orange); font-weight:700; }
+.ai-status { margin-top:8px; font-size:11px; line-height:1.45; color:var(--text3); }
+.ai-result { max-width:600px; margin:0 auto; }
+.ai-result img { width:100%; display:block; border-radius:8px; border:1px solid var(--border); image-rendering:auto; }
+.ai-result-actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
+
 .progress { width: 100%; height: 6px; background: var(--bg2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--green2)); border-radius: 3px; transition: width 0.15s; }
 
@@ -262,6 +273,31 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
     </div>
 
     <div class="section">
+      <div class="section-title">Método de geração</div>
+      <div class="ai-mode-card">
+        <div class="ai-mode-options">
+          <label class="ai-mode-option">
+            <input type="radio" name="generationMode" value="perlin" checked onchange="setGenerationMode(this.value)">
+            <span><strong>Procedural rápido — Perlin</strong><br><small style="color:var(--text3)">Padrão atual, instantâneo e com exportação Lua.</small></span>
+          </label>
+          <label class="ai-mode-option">
+            <input type="radio" name="generationMode" value="erosion" onchange="setGenerationMode(this.value)">
+            <span><strong>Terreno refinado com erosão</strong> <span class="ai-beta">BETA</span><br><small style="color:var(--text3)">Gera heightmap PNG no servidor Python para importar no Terrain Editor.</small></span>
+          </label>
+        </div>
+        <div id="erosionOptions" style="display:none;margin-top:10px">
+          <label class="label">Intensidade da erosão</label>
+          <select id="cfgErosion" onchange="config.erosion=this.value" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px">
+            <option value="light">Leve</option>
+            <option value="medium" selected>Média</option>
+            <option value="strong">Intensa</option>
+          </select>
+          <div class="ai-status" id="aiStatus">O modo Perlin continua disponível caso o serviço Beta esteja offline.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
       <label class="label">Nome do mapa</label>
       <input type="text" id="mapName" placeholder="Meu Mapa Incrível">
     </div>
@@ -289,7 +325,8 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
 // ═══ API URL ═══
 // ═══ API URL ═══
 const API = 'https://precisao.agr.br/apis/roblox/mapa/';
-
+// API Python local para testes. Em produção, troque por uma URL HTTPS pública.
+const HEIGHTMAP_API = 'https://mapa-ia.hortaconecta.com.br';
 // ═══ Estado ═══
 let config = {
   preset: 'tropical', size: 'medium', seed: 42, scale: 0.008, octaves: 6,
@@ -301,10 +338,12 @@ let config = {
   lighting: 'tropical',
   // Seeds individuais por feature (permite randomizar cada um separado)
   treeSeed: 7777, rockSeed: 8888, caveSeed: 9999, riverSeed: 333,
+  generationMode: 'perlin', erosion: 'medium',
 };
 
 let generatedLua = '';
 let generatedJSON = '';
+let generatedHeightmap = null;
 let currentTab = 'preview';
 let is3D = false;
 let scene3D = null, camera3D = null, renderer3D = null, animFrame3D = null;
@@ -413,6 +452,23 @@ function syncUI() {
 }
 
 function updateConfig(key, val) { config[key] = val; }
+function setGenerationMode(mode) {
+  config.generationMode = mode;
+  document.getElementById('erosionOptions').style.display = mode === 'erosion' ? 'block' : 'none';
+  generatedHeightmap = null;
+  const btn = document.getElementById('btnGenerate');
+  btn.textContent = mode === 'erosion' ? '⛰️ GERAR HEIGHTMAP BETA' : '⚡ GERAR MAPA';
+  if (currentTab === 'preview') showTab('preview');
+}
+function absoluteHeightmapUrl(path) {
+  if (!path) return '';
+  return /^https?:\/\//i.test(path) ? path : HEIGHTMAP_API.replace(/\/$/, '') + path;
+}
+function downloadHeightmap(url, filename) {
+  const a = document.createElement('a');
+  a.href = url; a.download = filename || 'heightmap.png'; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+}
 function updateSlider(key, el) {
   config[key] = +el.value;
   const lbl = document.getElementById('lbl' + key.charAt(0).toUpperCase() + key.slice(1));
@@ -600,20 +656,26 @@ function renderPreview() {
     ctx.globalAlpha = 1;
   }
 
-  // 🌳 Árvores — pontos verdes
+  // 🌳 Árvores — pontos verdes (hash para distribuição uniforme)
   if (config.placeTrees) {
+    const tSeed = config.seed + config.treeSeed;
     for (let px = 0; px < W; px += 4) {
       for (let py = 0; py < H; py += 4) {
         const h = getH(px, py);
         if (h > config.waterLevel + 0.04 && h < 0.75) {
-          const tn = p4.noise(px * 0.1, py * 0.1);
-          const temp = (p2.noise(px/W*8*0.3, py/H*8*0.3)+1)*0.5;
+          // Hash determinístico uniforme em vez de Perlin (evita clusters)
+          let hv = ((px * 73856093) ^ (py * 19349663) ^ (tSeed * 83492791)) & 0x7fffffff;
+          hv = ((hv >> 13) ^ hv) * 1274126177; hv = ((hv >> 16) ^ hv) & 0x7fffffff;
+          const rnd = hv / 0x7fffffff; // 0..1 uniforme
+          const temp = (p2.noise(px/W*8*0.9, py/H*8*0.9)+1)*0.5;
           let density = config.treeDensity;
-          if (temp > 0.4 && temp < 0.7) density *= 3; // floresta
+          if (temp > 0.4 && temp < 0.7) density *= 2.5; // floresta
           if (config.preset === 'desert' || config.preset === 'arctic') density *= 0.1;
 
-          if (tn > (1 - density * 20)) {
-            const size = 1.5 + Math.random() * 1.5;
+          if (rnd < Math.min(density * 3, 0.55)) {
+            // Segundo hash para tamanho (determinístico)
+            let hv2 = ((px * 48611) ^ (py * 95317) ^ tSeed) & 0x7fffffff;
+            const size = 1.5 + (hv2 / 0x7fffffff) * 1.5;
             // Sombra
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.beginPath();
@@ -630,15 +692,19 @@ function renderPreview() {
     }
   }
 
-  // 🪨 Pedras — pontos cinza
+  // 🪨 Pedras — pontos cinza (hash para distribuição uniforme)
   if (config.placeRocks) {
+    const rSeed = config.seed + config.rockSeed;
     for (let px = 0; px < W; px += 6) {
       for (let py = 0; py < H; py += 6) {
         const h = getH(px, py);
         if (h > config.waterLevel + 0.02 && h < 0.9) {
-          const rn = p5.noise(px * 0.15, py * 0.15);
-          if (rn > (1 - config.rockDensity * 40)) {
-            const size = 1 + Math.random() * 1.5;
+          let hv = ((px * 56239) ^ (py * 37441) ^ (rSeed * 71263)) & 0x7fffffff;
+          hv = ((hv >> 13) ^ hv) * 1274126177; hv = ((hv >> 16) ^ hv) & 0x7fffffff;
+          const rnd = hv / 0x7fffffff;
+          if (rnd < config.rockDensity * 20) {
+            let hv2 = ((px * 29311) ^ (py * 61843) ^ rSeed) & 0x7fffffff;
+            const size = 1 + (hv2 / 0x7fffffff) * 1.5;
             ctx.fillStyle = 'rgba(140,140,140,0.7)';
             ctx.beginPath();
             ctx.arc(px, py, size, 0, Math.PI * 2);
@@ -1010,6 +1076,20 @@ function switchTab(id, el) {
 function showTab(id) {
   const body = document.getElementById('tabContent');
   if(id==='preview') {
+    if (generatedHeightmap && config.generationMode === 'erosion') {
+      const previewUrl = absoluteHeightmapUrl(generatedHeightmap.files.preview);
+      const heightmapUrl = absoluteHeightmapUrl(generatedHeightmap.files.heightmap);
+      body.innerHTML = `<div class="toolbar"><span>⛰️ Heightmap com erosão · ${generatedHeightmap.seconds}s</span><button class="btn-copy" onclick="generatedHeightmap=null;showTab('preview')">↻ Voltar ao preview local</button></div>
+        <div class="ai-result">
+          <img src="${previewUrl}" alt="Preview do heightmap com erosão">
+          <div class="ai-result-actions">
+            <button class="btn-copy" onclick="downloadHeightmap('${heightmapUrl}','heightmap_${generatedHeightmap.id}.png')">⬇️ Baixar heightmap 16-bit</button>
+            <button class="btn-copy" onclick="window.open('${previewUrl}','_blank')">🔍 Abrir preview</button>
+          </div>
+          <div class="ai-status" style="text-align:center">Água resultante: ${generatedHeightmap.stats.water_area_percent}% · Resolução: ${generatedHeightmap.terrain.resolution}×${generatedHeightmap.terrain.resolution}</div>
+        </div>`;
+      return;
+    }
     cleanup3D();
     const legendHtml = `<div class="legend">${Object.entries(MAT_COLORS).slice(0,12).map(([k,v])=>`<div class="legend-item"><div class="legend-color" style="background:rgb(${v})"></div>${k}</div>`).join('')}</div>`;
     if (is3D) {
@@ -1067,47 +1147,74 @@ async function generateMap() {
   const btn = document.getElementById('btnGenerate');
   const bar = document.getElementById('progressBar');
   const fill = document.getElementById('progressFill');
-  btn.disabled = true; btn.textContent = '⏳ Gerando...';
+  const originalLabel = config.generationMode === 'erosion' ? '⛰️ GERAR HEIGHTMAP BETA' : '⚡ GERAR MAPA';
+  btn.disabled = true; btn.textContent = config.generationMode === 'erosion' ? '⏳ Refinando terreno...' : '⏳ Gerando...';
   bar.style.display = 'block'; fill.style.width = '10%';
 
   const name = document.getElementById('mapName').value || 'Mapa ' + new Date().toLocaleString('pt-BR');
-
-  // Animação de progresso
   let pct = 10;
-  const iv = setInterval(() => { pct = Math.min(90, pct + Math.random()*15); fill.style.width = pct+'%'; }, 150);
+  const iv = setInterval(() => { pct = Math.min(90, pct + Math.random()*12); fill.style.width = pct+'%'; }, 180);
 
   try {
+    if (config.generationMode === 'erosion') {
+      const resolution = SIZES[config.size]?.[0] || 256;
+      const payload = {
+        seed: config.seed,
+        resolution: Math.min(resolution, 512),
+        amplitude: config.amplitude,
+        water_level: config.waterLevel,
+        octaves: config.octaves,
+        lacunarity: config.lacunarity,
+        gain: config.gain,
+        mountain_threshold: config.mountainThreshold,
+        mountain_amplitude: config.mountainAmplitude,
+        island_mode: config.islandMode,
+        volcano: config.volcano,
+        erosion: config.erosion || 'medium',
+        response: 'json'
+      };
+      const res = await fetch(HEIGHTMAP_API + '/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Heightmap API HTTP ' + res.status);
+      generatedHeightmap = await res.json();
+      generatedJSON = JSON.stringify({ generator:'RobloxMapArchitect', mode:'erosion', name, ...config, heightmap: generatedHeightmap }, null, 2);
+      generatedLua = `-- Modo Heightmap com erosão (Beta)\n-- Este terreno deve ser importado pelo Terrain Editor do Roblox Studio.\n-- Heightmap: ${absoluteHeightmapUrl(generatedHeightmap.files.heightmap)}\n-- Preview: ${absoluteHeightmapUrl(generatedHeightmap.files.preview)}\n-- Seed: ${config.seed}\n-- Resolução: ${payload.resolution}x${payload.resolution}`;
+      clearInterval(iv); fill.style.width = '100%';
+      switchTab('preview', document.querySelectorAll('.tab')[0]);
+      return;
+    }
+
     const res = await fetch(API + '?action=generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config, name })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config, name })
     });
     const data = await res.json();
-
-    clearInterval(iv);
-    fill.style.width = '100%';
-
+    clearInterval(iv); fill.style.width = '100%';
     if (data.ok) {
       generatedLua = data.data.lua_script;
       generatedJSON = JSON.stringify(config, null, 2);
       setTimeout(() => { switchTab('lua', document.querySelectorAll('.tab')[1]); }, 300);
     } else {
-      // Fallback: gerar localmente se API falhar
-      generatedLua = '-- API offline, gerando localmente...\n-- Config: ' + JSON.stringify(config, null, 2);
-      generatedJSON = JSON.stringify(config, null, 2);
-      alert('API offline — script gerado localmente. Configure o banco de dados primeiro.');
-      switchTab('lua', document.querySelectorAll('.tab')[1]);
+      throw new Error(data.error || 'API PHP retornou erro');
     }
   } catch(e) {
     clearInterval(iv);
-    // Gerar localmente como fallback
-    generatedJSON = JSON.stringify({ generator:'RobloxMapArchitect', version:'1.0', ...config }, null, 2);
-    generatedLua = `-- Gerado localmente (API offline)\n-- Configure: api/?action=install\n-- Config: seed=${config.seed}, size=${config.size}, preset=${config.preset}\n`;
-    switchTab('json', document.querySelectorAll('.tab')[2]);
+    if (config.generationMode === 'erosion') {
+      config.generationMode = 'perlin';
+      const radio = document.querySelector('input[name="generationMode"][value="perlin"]');
+      if (radio) radio.checked = true;
+      document.getElementById('erosionOptions').style.display = 'none';
+      alert('O serviço de erosão está indisponível. O site voltou ao modo Perlin sem interromper o gerador.\n\nDetalhe: ' + e.message);
+      renderPreview();
+    } else {
+      generatedJSON = JSON.stringify({ generator:'RobloxMapArchitect', version:'1.0', ...config }, null, 2);
+      generatedLua = `-- Gerado localmente (API offline)\n-- Config: seed=${config.seed}, size=${config.size}, preset=${config.preset}\n`;
+      switchTab('json', document.querySelectorAll('.tab')[2]);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = originalLabel;
+    setTimeout(() => { bar.style.display = 'none'; }, 500);
   }
-
-  btn.disabled = false; btn.textContent = '⚡ GERAR MAPA';
-  setTimeout(() => { bar.style.display = 'none'; }, 500);
 }
 
 // ═══ History ═══
@@ -1492,9 +1599,9 @@ function render3DPreview() {
     scene3D.add(lavaLight);
   }
 
-  // ── Trees (InstancedMesh) ──
+  // ── Trees (InstancedMesh) — hash para distribuição uniforme ──
   if (config.placeTrees) {
-    const p4 = new Perlin(config.seed + config.treeSeed);
+    const tSeed3D = config.seed + config.treeSeed;
     const treePos = [];
     const step = 3;
     for (let iy = 0; iy < RES; iy += step) {
@@ -1502,17 +1609,21 @@ function render3DPreview() {
         const h = heights[iy*RES + ix];
         if (h > config.waterLevel+0.04 && h < 0.75) {
           const nx = ix/RES, ny = iy/RES;
-          const tn = p4.noise(nx*80*0.1, ny*80*0.1);
-          const temp = (p2.noise(nx*8*0.3, ny*8*0.3)+1)*0.5;
+          // Hash determinístico uniforme em vez de Perlin
+          let hv = ((ix * 73856093) ^ (iy * 19349663) ^ (tSeed3D * 83492791)) & 0x7fffffff;
+          hv = ((hv >> 13) ^ hv) * 1274126177; hv = ((hv >> 16) ^ hv) & 0x7fffffff;
+          const rnd = hv / 0x7fffffff;
+          const temp = (p2.noise(nx*8*0.9, ny*8*0.9)+1)*0.5;
           let density = config.treeDensity;
-          if (temp > 0.4 && temp < 0.7) density *= 3;
+          if (temp > 0.4 && temp < 0.7) density *= 2.5;
           if (config.preset==='desert'||config.preset==='arctic') density *= 0.1;
-          if (tn > (1 - density*20)) {
+          if (rnd < Math.min(density*3, 0.55)) {
+            let hv2 = ((ix * 48611) ^ (iy * 95317) ^ tSeed3D) & 0x7fffffff;
             treePos.push({
               x: (ix/RES - 0.5) * WORLD,
               y: h * HEIGHT_SCALE,
               z: (iy/RES - 0.5) * WORLD,
-              s: 0.6 + Math.random()*0.6
+              s: 0.6 + (hv2 / 0x7fffffff)*0.6
             });
           }
         }
@@ -1541,22 +1652,24 @@ function render3DPreview() {
     }
   }
 
-  // ── Rocks (InstancedMesh) ──
+  // ── Rocks (InstancedMesh) — hash para distribuição uniforme ──
   if (config.placeRocks) {
-    const p5 = new Perlin(config.seed + config.rockSeed);
+    const rSeed3D = config.seed + config.rockSeed;
     const rockPos = [];
     for (let iy = 0; iy < RES; iy += 4) {
       for (let ix = 0; ix < RES; ix += 4) {
         const h = heights[iy*RES + ix];
         if (h > config.waterLevel+0.02 && h < 0.9) {
-          const nx = ix/RES, ny = iy/RES;
-          const rn = p5.noise(nx*80*0.15, ny*80*0.15);
-          if (rn > (1 - config.rockDensity*40)) {
+          let hv = ((ix * 56239) ^ (iy * 37441) ^ (rSeed3D * 71263)) & 0x7fffffff;
+          hv = ((hv >> 13) ^ hv) * 1274126177; hv = ((hv >> 16) ^ hv) & 0x7fffffff;
+          const rnd = hv / 0x7fffffff;
+          if (rnd < config.rockDensity*20) {
+            let hv2 = ((ix * 29311) ^ (iy * 61843) ^ rSeed3D) & 0x7fffffff;
             rockPos.push({
               x: (ix/RES-0.5)*WORLD,
               y: h*HEIGHT_SCALE,
               z: (iy/RES-0.5)*WORLD,
-              s: 0.4 + Math.random()*0.7
+              s: 0.4 + (hv2/0x7fffffff)*0.7
             });
           }
         }
