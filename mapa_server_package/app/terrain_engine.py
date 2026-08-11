@@ -412,14 +412,184 @@ def save_png16(path: Path, h: np.ndarray):
     Image.fromarray(arr, mode='I;16').save(path)
 
 
-def save_preview(path: Path, h: np.ndarray, water_level: float):
-    # Colored diagnostic preview; grayscale PNG remains the Roblox import artifact.
+
+def build_material_map(h: np.ndarray, water_level: float, preset: str = "custom") -> np.ndarray:
+    """Return an unshaded RGB colormap for Roblox Terrain import.
+
+    Colors are categorical and intentionally flat. The preview uses relief shading,
+    while this image is meant to act as the material/biome companion file.
+
+    The altitude bands adapt to how much vertical range the land actually uses.
+    On flat presets (resort, city, tycoon) a fixed 0.055/0.40/0.70 split would
+    dump nearly every pixel into `shore`, producing an all-sand map. When the
+    land is compressed we fall back to percentile cuts so every band gets used.
+    """
+    h = np.clip(h, 0.0, 1.0)
+    gy, gx = np.gradient(h)
+    slope = np.sqrt(gx * gx + gy * gy)
+    rgb = np.zeros((*h.shape, 3), dtype=np.uint8)
+    land_span = max(1e-6, 1.0 - water_level)
+    land_h = np.clip((h - water_level) / land_span, 0.0, 1.0)
     water = h < water_level
-    gray = np.round(np.clip(h, 0, 1) * 255).astype(np.uint8)
-    rgb = np.stack([gray, gray, gray], axis=-1)
-    rgb[water, 0] = (gray[water] * 0.10).astype(np.uint8)
-    rgb[water, 1] = (gray[water] * 0.45 + 35).astype(np.uint8)
-    rgb[water, 2] = (gray[water] * 0.55 + 70).astype(np.uint8)
+
+    # Adaptive bands: measure how much of the land range is actually occupied.
+    land_values = land_h[~water]
+    if land_values.size > 32:
+        p95 = float(np.percentile(land_values, 95))
+    else:
+        p95 = 1.0
+
+    if p95 < 0.45:
+        # Flat terrain: use percentiles so the palette spreads across the map.
+        b_shore = float(np.percentile(land_values, 10))
+        b_low = float(np.percentile(land_values, 60))
+        b_up = float(np.percentile(land_values, 94))
+        # Guard against degenerate ties on perfectly flat ground.
+        b_low = max(b_low, b_shore + 1e-4)
+        b_up = max(b_up, b_low + 1e-4)
+        slope_cut = 0.022
+    else:
+        b_shore, b_low, b_up = 0.055, 0.40, 0.70
+        slope_cut = 0.032
+
+    shore = (~water) & (land_h < b_shore)
+    lowland = (~water) & (land_h >= b_shore) & (land_h < b_low)
+    upland = (~water) & (land_h >= b_low) & (land_h < b_up)
+    alpine = (~water) & (land_h >= b_up)
+    cliffs = (~water) & (slope > slope_cut)
+
+    # Cores EXATAS dos materiais de terreno do Roblox.
+    # O Terrain Editor mapeia cada pixel do colormap para o material de cor mais
+    # proxima. Usar valores aproximados fazia praia virar Salt (branco) e agua
+    # virar Slate. Usando o RGB exato a distancia e zero e o material e garantido.
+    M = {
+        'Grass': (106, 127, 63), 'LeafyGrass': (115, 132, 74), 'Ground': (102, 92, 59),
+        'Sand': (143, 126, 95), 'Sandstone': (137, 90, 71), 'Limestone': (206, 173, 148),
+        'Rock': (102, 108, 111), 'Slate': (63, 127, 107), 'Basalt': (30, 30, 37),
+        'Snow': (195, 199, 218), 'Ice': (129, 194, 224), 'Glacier': (101, 176, 234),
+        'Salt': (198, 189, 181), 'Mud': (58, 46, 36), 'CrackedLava': (232, 156, 74),
+        'Asphalt': (115, 123, 107), 'Concrete': (127, 102, 63),
+        'Cobblestone': (132, 123, 90), 'Pavement': (148, 148, 140),
+        'WoodPlanks': (139, 109, 79), 'Water': (12, 84, 92),
+    }
+
+    palettes = {
+        'desert':   {'water': M['Water'], 'shore': M['Sand'],  'low': M['Sand'],       'up': M['Sandstone'], 'high': M['Limestone'], 'cliff': M['Sandstone']},
+        'arctic':   {'water': M['Ice'],   'shore': M['Snow'],  'low': M['Snow'],       'up': M['Glacier'],   'high': M['Snow'],      'cliff': M['Rock']},
+        'volcanic': {'water': M['Water'], 'shore': M['Basalt'],'low': M['Basalt'],     'up': M['Rock'],      'high': M['Rock'],      'cliff': M['Basalt']},
+        'tropical': {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'],      'up': M['LeafyGrass'],'high': M['Rock'],      'cliff': M['Rock']},
+        'rpg':      {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'],      'up': M['LeafyGrass'],'high': M['Rock'],      'cliff': M['Rock']},
+        'resort':   {'water': M['Water'], 'shore': M['Sand'],  'low': M['LeafyGrass'], 'up': M['Grass'],     'high': M['Rock'],      'cliff': M['Rock']},
+        'coastal_city':     {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'], 'up': M['LeafyGrass'], 'high': M['Rock'], 'cliff': M['Rock']},
+        'mountain_village': {'water': M['Water'], 'shore': M['Ground'],'low': M['Grass'], 'up': M['LeafyGrass'], 'high': M['Rock'], 'cliff': M['Rock']},
+    }
+    c = palettes.get(preset, palettes['rpg'])
+    rgb[water] = c['water']
+    rgb[shore] = c['shore']
+    rgb[lowland] = c['low']
+    rgb[upland] = c['up']
+    rgb[alpine] = c['high']
+    rgb[cliffs] = c['cliff']
+    return rgb
+
+
+def save_colormap(path: Path, h: np.ndarray, water_level: float, preset: str = 'custom'):
+    Image.fromarray(build_material_map(h, water_level, preset), mode='RGB').save(path)
+
+def save_preview(path: Path, h: np.ndarray, water_level: float, preset: str = 'custom'):
+    """Create a readable biome/material preview without changing the 16-bit heightmap.
+
+    The colors are diagnostic only. The exported grayscale PNG remains the source of
+    truth for Roblox Terrain Editor import.
+    """
+    h = np.clip(h, 0.0, 1.0)
+    gy, gx = np.gradient(h)
+    slope = np.sqrt(gx * gx + gy * gy)
+    rgb = np.zeros((*h.shape, 3), dtype=np.float32)
+
+    # Normalize altitude above the selected water line so presets remain comparable.
+    land_span = max(1e-6, 1.0 - water_level)
+    land_h = np.clip((h - water_level) / land_span, 0.0, 1.0)
+    water = h < water_level
+
+    # Same adaptive banding as build_material_map so preview matches the colormap.
+    land_values = land_h[~water]
+    if land_values.size > 32:
+        p95 = float(np.percentile(land_values, 95))
+    else:
+        p95 = 1.0
+
+    if p95 < 0.45:
+        b_shore = float(np.percentile(land_values, 10))
+        b_low = float(np.percentile(land_values, 60))
+        b_up = float(np.percentile(land_values, 94))
+        b_low = max(b_low, b_shore + 1e-4)
+        b_up = max(b_up, b_low + 1e-4)
+        slope_cut = 0.022
+    else:
+        b_shore, b_low, b_up = 0.045, 0.38, 0.68
+        slope_cut = 0.032
+
+    shore = (~water) & (land_h < b_shore)
+    lowland = (~water) & (land_h >= b_shore) & (land_h < b_low)
+    upland = (~water) & (land_h >= b_low) & (land_h < b_up)
+    alpine = (~water) & (land_h >= b_up)
+    cliffs = (~water) & (slope > slope_cut)
+
+    # Deep-to-shallow water gradient.
+    depth = np.clip((water_level - h) / max(water_level, 0.08), 0.0, 1.0)
+    rgb[water, 0] = 8 + (1.0 - depth[water]) * 18
+    rgb[water, 1] = 68 + (1.0 - depth[water]) * 62
+    rgb[water, 2] = 128 + (1.0 - depth[water]) * 72
+
+    # Mesmas cores base do colormap (materiais reais do Roblox), mas o preview
+    # aplica sombreamento de relevo depois, entao aqui ficam levemente
+    # clareadas para o mapa do site nao ficar escuro demais.
+    palette = {
+        'desert': {
+            'shore': (160, 141, 106), 'low': (152, 125, 96),
+            'up': (152, 100, 79), 'high': (206, 173, 148),
+        },
+        'arctic': {
+            'shore': (195, 199, 218), 'low': (185, 191, 210),
+            'up': (112, 190, 240), 'high': (205, 209, 226),
+        },
+        'volcanic': {
+            'shore': (52, 52, 60), 'low': (44, 44, 52),
+            'up': (102, 108, 111), 'high': (118, 124, 128),
+        },
+        'tropical': {
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        'rpg': {
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        'resort': {
+            'shore': (163, 144, 109), 'low': (128, 147, 82),
+            'up': (118, 141, 70), 'high': (114, 120, 124),
+        },
+        'coastal_city': {
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        'mountain_village': {
+            'shore': (114, 103, 66), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+    }
+    colors = palette.get(preset, palette['rpg'])
+    rgb[shore] = colors['shore']
+    rgb[lowland] = colors['low']
+    rgb[upland] = colors['up']
+    rgb[alpine] = colors['high']
+    rgb[cliffs] = (104, 106, 103)
+
+    # Gentle relief shading makes valleys/ridges visible without pretending to be a colormap.
+    light = np.clip(0.92 + (-gx * 5.2 - gy * 4.2), 0.68, 1.18)
+    rgb *= light[..., None]
+    rgb = np.clip(rgb, 0, 255).astype(np.uint8)
     Image.fromarray(rgb, mode='RGB').save(path)
 
 
@@ -465,7 +635,7 @@ def main():
     base_time = time.perf_counter() - t0
     stem = f'{args.preset}_seed_{args.seed}_{args.resolution}'
     save_png16(args.output / f'{stem}_original.png', base)
-    save_preview(args.output / f'{stem}_original_preview.png', base, terrain.water_level)
+    save_preview(args.output / f'{stem}_original_preview.png', base, terrain.water_level, args.preset)
     report['runs']['original'] = {'seconds': round(base_time, 3), 'stats': stats(base, terrain.water_level)}
 
     for name, erosion_cfg in levels.items():
@@ -474,7 +644,7 @@ def main():
         eroded = normalize_preserving_range(eroded, base)
         elapsed = time.perf_counter() - t0
         save_png16(args.output / f'{stem}_erosion_{name}.png', eroded)
-        save_preview(args.output / f'{stem}_erosion_{name}_preview.png', eroded, terrain.water_level)
+        save_preview(args.output / f'{stem}_erosion_{name}_preview.png', eroded, terrain.water_level, args.preset)
         report['runs'][name] = {
             'seconds': round(elapsed, 3),
             'erosion_config': asdict(erosion_cfg),

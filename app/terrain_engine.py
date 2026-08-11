@@ -400,9 +400,58 @@ def remove_small_water_bodies(
     }
 
 
-def postprocess_terrain(h: np.ndarray, reference: np.ndarray, water_level: float) -> tuple[np.ndarray, dict]:
+def apply_coastal_shelf(h: np.ndarray, water_level: float, strength: float = 0.75) -> np.ndarray:
+    """Achata a faixa logo acima da agua, criando um plato costeiro construivel.
+
+    Num resort o terreno ondulado e o que impede as construcoes de assentarem:
+    por mais criterioso que seja o algoritmo de posicionamento, ele so pode
+    escolher entre os locais que existem. Esta funcao cria os locais.
+
+    A faixa entre `water_level` e `water_level + banda` e puxada em direcao a
+    uma altura alvo comum. O peso segue uma curva suave (smoothstep), entao a
+    transicao para o relevo natural acima nao tem degrau visivel.
+
+    `strength` 0 = nenhum achatamento, 1 = plato perfeitamente plano.
+    """
+    if strength <= 0:
+        return h
+
+    banda = 0.16
+    lo = water_level + 0.015          # deixa a praia em declive natural
+    hi = water_level + banda
+    alvo = water_level + banda * 0.42  # altura do plato
+
+    # Peso: sobe suave a partir de lo, cai suave antes de hi
+    t = np.clip((h - lo) / max(hi - lo, 1e-6), 0.0, 1.0)
+    entrada = t * t * (3 - 2 * t)              # smoothstep de subida
+    saida = 1.0 - (t * t * (3 - 2 * t))        # decai ao se aproximar do topo
+    peso = np.clip(entrada * 2.0, 0, 1) * np.clip(saida * 2.0, 0, 1)
+    peso = peso * strength
+    peso[h <= lo] = 0.0
+    peso[h >= hi] = 0.0
+
+    achatado = h * (1 - peso) + alvo * peso
+
+    # Suaviza a juncao com media 3x3, para nao restar aresta
+    pad = np.pad(achatado, 1, mode='edge')
+    media = (
+        pad[:-2, :-2] + pad[:-2, 1:-1] + pad[:-2, 2:] +
+        pad[1:-1, :-2] + pad[1:-1, 1:-1] + pad[1:-1, 2:] +
+        pad[2:, :-2] + pad[2:, 1:-1] + pad[2:, 2:]
+    ) / 9.0
+    mistura = np.clip(peso * 1.2, 0, 1)
+    return np.clip(achatado * (1 - mistura) + media * mistura, 0.0, 1.0)
+
+
+def postprocess_terrain(h: np.ndarray, reference: np.ndarray, water_level: float,
+                        shelf: float = 0.0) -> tuple[np.ndarray, dict]:
     h = normalize_preserving_range(h, reference)
     h = calibrate_water_area(h, water_level)
+    # O plato precisa vir DEPOIS da calibracao da agua: antes dela as alturas
+    # ainda nao estao posicionadas em relacao ao water_level, e o deslocamento
+    # da calibracao (~0.18) jogava a faixa do plato para fora do terreno.
+    if shelf > 0:
+        h = apply_coastal_shelf(h, water_level, shelf)
     h, water_info = remove_small_water_bodies(h, water_level)
     return np.clip(h, 0.0, 1.0), water_info
 
@@ -411,6 +460,104 @@ def save_png16(path: Path, h: np.ndarray):
     arr = np.round(np.clip(h, 0, 1) * 65535).astype(np.uint16)
     Image.fromarray(arr, mode='I;16').save(path)
 
+
+
+def build_material_map(h: np.ndarray, water_level: float, preset: str = "custom") -> np.ndarray:
+    """Return an unshaded RGB colormap for Roblox Terrain import.
+
+    Colors are categorical and intentionally flat. The preview uses relief shading,
+    while this image is meant to act as the material/biome companion file.
+
+    The altitude bands adapt to how much vertical range the land actually uses.
+    On flat presets (resort, city, tycoon) a fixed 0.055/0.40/0.70 split would
+    dump nearly every pixel into `shore`, producing an all-sand map. When the
+    land is compressed we fall back to percentile cuts so every band gets used.
+    """
+    h = np.clip(h, 0.0, 1.0)
+    gy, gx = np.gradient(h)
+    slope = np.sqrt(gx * gx + gy * gy)
+    rgb = np.zeros((*h.shape, 3), dtype=np.uint8)
+    land_span = max(1e-6, 1.0 - water_level)
+    land_h = np.clip((h - water_level) / land_span, 0.0, 1.0)
+    water = h < water_level
+
+    # Adaptive bands: measure how much of the land range is actually occupied.
+    land_values = land_h[~water]
+    if land_values.size > 32:
+        p95 = float(np.percentile(land_values, 95))
+    else:
+        p95 = 1.0
+
+    if p95 < 0.45:
+        # Flat terrain: use percentiles so the palette spreads across the map.
+        b_shore = float(np.percentile(land_values, 10))
+        b_low = float(np.percentile(land_values, 60))
+        b_up = float(np.percentile(land_values, 94))
+        # Guard against degenerate ties on perfectly flat ground.
+        b_low = max(b_low, b_shore + 1e-4)
+        b_up = max(b_up, b_low + 1e-4)
+        slope_cut = 0.022
+    else:
+        b_shore, b_low, b_up = 0.055, 0.40, 0.70
+        slope_cut = 0.032
+
+    shore = (~water) & (land_h < b_shore)
+    lowland = (~water) & (land_h >= b_shore) & (land_h < b_low)
+    upland = (~water) & (land_h >= b_low) & (land_h < b_up)
+    alpine = (~water) & (land_h >= b_up)
+    cliffs = (~water) & (slope > slope_cut)
+
+    # Cores EXATAS dos materiais de terreno do Roblox.
+    # O Terrain Editor mapeia cada pixel do colormap para o material de cor mais
+    # proxima. Usar valores aproximados fazia praia virar Salt (branco) e agua
+    # virar Slate. Usando o RGB exato a distancia e zero e o material e garantido.
+    M = {
+        'Grass': (106, 127, 63), 'LeafyGrass': (115, 132, 74), 'Ground': (102, 92, 59),
+        'Sand': (143, 126, 95), 'Sandstone': (137, 90, 71), 'Limestone': (206, 173, 148),
+        'Rock': (102, 108, 111), 'Slate': (63, 127, 107), 'Basalt': (30, 30, 37),
+        'Snow': (195, 199, 218), 'Ice': (129, 194, 224), 'Glacier': (101, 176, 234),
+        'Salt': (198, 189, 181), 'Mud': (58, 46, 36), 'CrackedLava': (232, 156, 74),
+        'Asphalt': (115, 123, 107), 'Concrete': (127, 102, 63),
+        'Cobblestone': (132, 123, 90), 'Pavement': (148, 148, 140),
+        'WoodPlanks': (139, 109, 79), 'Water': (12, 84, 92),
+    }
+
+    palettes = {
+        'desert':   {'water': M['Water'], 'shore': M['Sand'],  'low': M['Sand'],       'up': M['Sandstone'], 'high': M['Limestone'], 'cliff': M['Sandstone']},
+        'arctic':   {'water': M['Ice'],   'shore': M['Snow'],  'low': M['Snow'],       'up': M['Glacier'],   'high': M['Snow'],      'cliff': M['Rock']},
+        'volcanic': {'water': M['Water'], 'shore': M['Basalt'],'low': M['Basalt'],     'up': M['Rock'],      'high': M['Rock'],      'cliff': M['Basalt']},
+        'tropical': {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'],      'up': M['LeafyGrass'],'high': M['Rock'],      'cliff': M['Rock']},
+        'rpg':      {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'],      'up': M['LeafyGrass'],'high': M['Rock'],      'cliff': M['Rock']},
+        'resort':   {'water': M['Water'], 'shore': M['Sand'],  'low': M['LeafyGrass'], 'up': M['Grass'],     'high': M['Rock'],      'cliff': M['Rock']},
+        'coastal_city':     {'water': M['Water'], 'shore': M['Sand'],  'low': M['Grass'], 'up': M['LeafyGrass'], 'high': M['Rock'], 'cliff': M['Rock']},
+        # Metropole: chao de cidade, nao campo. Sem Grass e sem LeafyGrass —
+        # era a paleta de grama que fazia o mapa 100%% urbano parecer pasto.
+        # Metropole: chao de cidade, mas nao um cinza so — Ground e
+        # Cobblestone quebram a monotonia sem trazer grama de volta.
+        # Metropole: cinza de rua dominante. Pavement puxava para pedreira
+        # branca e Cobblestone puxava para camuflagem marrom; Asphalt como
+        # base com Pavement clareando da meia altura para cima le como cidade.
+        # Floresta: chao de mata inteiro. Sem Sand — praia branca no meio da
+        # floresta nao faz sentido nenhum, e era ela que dava o anel claro em
+        # volta de cada depressao. A margem vira barro (Ground).
+        'forest_horror': {'water': M['Water'], 'shore': M['Ground'], 'low': M['Grass'],
+                          'up': M['LeafyGrass'], 'high': M['Ground'], 'cliff': M['Rock']},
+        'metropole': {'water': M['Water'], 'shore': M['Ground'], 'low': M['Asphalt'],
+                      'up': M['Pavement'], 'high': M['Cobblestone'], 'cliff': M['Rock']},
+        'mountain_village': {'water': M['Water'], 'shore': M['Ground'],'low': M['Grass'], 'up': M['LeafyGrass'], 'high': M['Rock'], 'cliff': M['Rock']},
+    }
+    c = palettes.get(preset, palettes['rpg'])
+    rgb[water] = c['water']
+    rgb[shore] = c['shore']
+    rgb[lowland] = c['low']
+    rgb[upland] = c['up']
+    rgb[alpine] = c['high']
+    rgb[cliffs] = c['cliff']
+    return rgb
+
+
+def save_colormap(path: Path, h: np.ndarray, water_level: float, preset: str = 'custom'):
+    Image.fromarray(build_material_map(h, water_level, preset), mode='RGB').save(path)
 
 def save_preview(path: Path, h: np.ndarray, water_level: float, preset: str = 'custom'):
     """Create a readable biome/material preview without changing the 16-bit heightmap.
@@ -427,11 +574,30 @@ def save_preview(path: Path, h: np.ndarray, water_level: float, preset: str = 'c
     land_span = max(1e-6, 1.0 - water_level)
     land_h = np.clip((h - water_level) / land_span, 0.0, 1.0)
     water = h < water_level
-    shore = (~water) & (land_h < 0.045)
-    lowland = (~water) & (land_h >= 0.045) & (land_h < 0.38)
-    upland = (~water) & (land_h >= 0.38) & (land_h < 0.68)
-    alpine = (~water) & (land_h >= 0.68)
-    cliffs = (~water) & (slope > 0.032)
+
+    # Same adaptive banding as build_material_map so preview matches the colormap.
+    land_values = land_h[~water]
+    if land_values.size > 32:
+        p95 = float(np.percentile(land_values, 95))
+    else:
+        p95 = 1.0
+
+    if p95 < 0.45:
+        b_shore = float(np.percentile(land_values, 10))
+        b_low = float(np.percentile(land_values, 60))
+        b_up = float(np.percentile(land_values, 94))
+        b_low = max(b_low, b_shore + 1e-4)
+        b_up = max(b_up, b_low + 1e-4)
+        slope_cut = 0.022
+    else:
+        b_shore, b_low, b_up = 0.045, 0.38, 0.68
+        slope_cut = 0.032
+
+    shore = (~water) & (land_h < b_shore)
+    lowland = (~water) & (land_h >= b_shore) & (land_h < b_low)
+    upland = (~water) & (land_h >= b_low) & (land_h < b_up)
+    alpine = (~water) & (land_h >= b_up)
+    cliffs = (~water) & (slope > slope_cut)
 
     # Deep-to-shallow water gradient.
     depth = np.clip((water_level - h) / max(water_level, 0.08), 0.0, 1.0)
@@ -439,26 +605,50 @@ def save_preview(path: Path, h: np.ndarray, water_level: float, preset: str = 'c
     rgb[water, 1] = 68 + (1.0 - depth[water]) * 62
     rgb[water, 2] = 128 + (1.0 - depth[water]) * 72
 
+    # Mesmas cores base do colormap (materiais reais do Roblox), mas o preview
+    # aplica sombreamento de relevo depois, entao aqui ficam levemente
+    # clareadas para o mapa do site nao ficar escuro demais.
     palette = {
         'desert': {
-            'shore': (205, 181, 120), 'low': (189, 154, 83),
-            'up': (151, 117, 70), 'high': (214, 202, 167),
+            'shore': (160, 141, 106), 'low': (152, 125, 96),
+            'up': (152, 100, 79), 'high': (206, 173, 148),
         },
         'arctic': {
-            'shore': (151, 190, 202), 'low': (132, 166, 166),
-            'up': (112, 132, 137), 'high': (235, 244, 248),
+            'shore': (195, 199, 218), 'low': (185, 191, 210),
+            'up': (112, 190, 240), 'high': (205, 209, 226),
         },
         'volcanic': {
-            'shore': (92, 78, 67), 'low': (77, 73, 68),
-            'up': (54, 51, 49), 'high': (124, 119, 112),
+            'shore': (52, 52, 60), 'low': (44, 44, 52),
+            'up': (102, 108, 111), 'high': (118, 124, 128),
         },
         'tropical': {
-            'shore': (206, 189, 129), 'low': (76, 139, 68),
-            'up': (54, 111, 59), 'high': (168, 173, 154),
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
         },
         'rpg': {
-            'shore': (194, 178, 126), 'low': (91, 139, 75),
-            'up': (68, 108, 70), 'high': (184, 188, 177),
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        'resort': {
+            'shore': (163, 144, 109), 'low': (128, 147, 82),
+            'up': (118, 141, 70), 'high': (114, 120, 124),
+        },
+        'coastal_city': {
+            'shore': (160, 141, 106), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        'mountain_village': {
+            'shore': (114, 103, 66), 'low': (118, 141, 70),
+            'up': (128, 147, 82), 'high': (114, 120, 124),
+        },
+        # Preview da Metropole tem que combinar com o colormap: chao urbano.
+        'forest_horror': {
+            'shore': (96, 88, 58), 'low': (86, 108, 56),
+            'up': (98, 116, 66), 'high': (104, 96, 62),
+        },
+        'metropole': {
+            'shore': (114, 103, 66), 'low': (126, 133, 118),
+            'up': (158, 158, 150), 'high': (142, 133, 100),
         },
     }
     colors = palette.get(preset, palette['rpg'])

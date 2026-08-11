@@ -171,7 +171,7 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
 <div class="header">
   <span class="logo">ROBLOX MAP ARCHITECT</span>
   <span class="db-status" id="dbStatus">⏳ Verificando BD...</span>
-  <span class="version">v1.0 — PHP Backend</span>
+  <span class="version" id="verLabel">HTML v1.2.0 · Urban Planner v0.9 · API <span id="verApi">?</span></span>
 </div>
 
 <div class="main">
@@ -202,21 +202,28 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
         <button class="btn-dice" onclick="randomSeed()">🎲</button>
       </div>
       <label class="label" id="lblAmplitude">Amplitude: 0.70</label>
-      <input type="range" id="cfgAmplitude" min="0.1" max="1" step="0.05" value="0.7" oninput="updateSlider('amplitude', this)">
+      <input type="range" id="cfgAmplitude" min="0.01" max="1" step="0.01" value="0.7" oninput="updateSlider('amplitude', this)">
+      <label class="label" style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <input type="checkbox" id="cfgSemAgua" onchange="config.semAgua=this.checked;if(this.checked){config.waterLevelAntes=config.waterLevel;config.waterLevel=0}else{config.waterLevel=config.waterLevelAntes||0.25}syncUI();renderPreview()">
+        🚱 Mapa sem água nenhuma
+      </label>
       <label class="label" id="lblWaterLevel">Nível d'água: 30%</label>
       <input type="range" id="cfgWaterLevel" min="0" max="0.6" step="0.02" value="0.3" oninput="updateSlider('waterLevel', this)">
       <label class="label" id="lblOctaves">Octaves: 6</label>
       <input type="range" id="cfgOctaves" min="1" max="8" step="1" value="6" oninput="updateSlider('octaves', this)">
       <label class="label" id="lblScale">Escala: 0.008</label>
       <input type="range" id="cfgScale" min="0.002" max="0.02" step="0.001" value="0.008" oninput="updateSlider('scale', this)">
+      <label class="label" id="lblCoastalShelf">Platô costeiro: 0%</label>
+      <input type="range" id="cfgCoastalShelf" min="0" max="1" step="0.05" value="0" oninput="config.coastalShelf=+this.value;document.getElementById('lblCoastalShelf').textContent='Platô costeiro: '+Math.round(this.value*100)+'%';renderPreview()" style="accent-color:var(--orange);width:100%">
+      <div class="ai-status" style="margin:2px 0 0">Achata a faixa logo acima da água. É o controle que decide quanta área sobra para lotear — sem ele a cidade sai com poucas casas.</div>
     </div>
 
     <div class="section">
       <div class="section-title">Montanhas</div>
       <label class="label" id="lblMountainThreshold">Limiar: 0.60</label>
-      <input type="range" id="cfgMountainThreshold" min="0.3" max="0.9" step="0.05" value="0.6" oninput="updateSlider('mountainThreshold', this)">
+      <input type="range" id="cfgMountainThreshold" min="0.3" max="1"  step="0.05" value="0.6" oninput="updateSlider('mountainThreshold', this)">
       <label class="label" id="lblMountainAmplitude">Amplitude: 0.40</label>
-      <input type="range" id="cfgMountainAmplitude" min="0.1" max="1" step="0.05" value="0.4" oninput="updateSlider('mountainAmplitude', this)">
+      <input type="range" id="cfgMountainAmplitude" min="0" max="1" step="0.05" value="0.4" oninput="updateSlider('mountainAmplitude', this)">
     </div>
 
     <div class="section">
@@ -247,7 +254,7 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
       </div>
       <div id="treeOptions" style="display:block;padding:0 0 8px 20px">
         <label class="label" id="lblTreeDensity">Densidade: 0.020</label>
-        <input type="range" id="cfgTreeDensity" style="accent-color:#3fb950;width:100%" min="0.001" max="0.08" step="0.002" value="0.02" oninput="config.treeDensity=+this.value;document.getElementById('lblTreeDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
+        <input type="range" id="cfgTreeDensity" style="accent-color:#3fb950;width:100%" min="0.001" max="0.10" step="0.002" value="0.02" oninput="config.treeDensity=+this.value;document.getElementById('lblTreeDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
       </div>
       <div class="toggle-row"><span>🪨 Pedras</span>
         <div style="display:flex;gap:4px;align-items:center">
@@ -259,19 +266,92 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
         <label class="label" id="lblRockDensity">Densidade: 0.005</label>
         <input type="range" id="cfgRockDensity" style="accent-color:#8b949e;width:100%" min="0.001" max="0.03" step="0.001" value="0.005" oninput="config.rockDensity=+this.value;document.getElementById('lblRockDensity').textContent='Densidade: '+parseFloat(this.value).toFixed(3);renderPreview()">
       </div>
-      <div class="toggle-row"><span>🏙️ Construções</span>
+      <div class="toggle-row"><span>🏙️ Urbanização & Construções</span>
         <div style="display:flex;gap:4px;align-items:center">
-          <button class="btn-dice" onclick="randomFeature('buildingSeed')" title="Randomizar layout">🎲</button>
+          <button class="btn-dice" onclick="config.buildingSeed2=Math.floor(Math.random()*99999);const el=document.getElementById('cfgBuildingSeed2');if(el)el.value=config.buildingSeed2;renderPreview()" title="Randomizar cidade">🎲</button>
           <button class="toggle" id="togUrbanEnabled" onclick="toggleFeature('urbanEnabled', this)"></button>
         </div>
       </div>
-      <div id="urbanOptions" style="display:none;padding:0 0 8px 20px">
-        <label class="label" id="lblBlockSize">Tamanho do bloco: 42</label>
-        <input type="range" style="accent-color:var(--accent);width:100%" min="24" max="80" step="2" value="42" oninput="config.blockSize=+this.value;document.getElementById('lblBlockSize').textContent='Tamanho do bloco: '+this.value;renderPreview()">
-        <label class="label" id="lblBuildingDensity">Densidade construções: 0.70</label>
-        <input type="range" style="accent-color:var(--orange);width:100%" min="0.2" max="1" step="0.05" value="0.7" oninput="config.buildingDensity=+this.value;document.getElementById('lblBuildingDensity').textContent='Densidade construções: '+parseFloat(this.value).toFixed(2);renderPreview()">
-        <label class="label" id="lblParkFrequency">Frequência parques: 0.15</label>
-        <input type="range" style="accent-color:var(--green);width:100%" min="0" max="0.4" step="0.05" value="0.15" oninput="config.parkFrequency=+this.value;document.getElementById('lblParkFrequency').textContent='Frequência parques: '+parseFloat(this.value).toFixed(2);renderPreview()">
+      <div id="urbanOptions" style="display:none;padding:10px 0 10px 20px">
+        <div style="font-weight:800;color:#68a9ff;margin-bottom:8px">🛣️ Urban Planner v1.0 — ruas → lotes → fachadas</div>
+
+        <label style="display:flex;gap:7px;align-items:center;margin-bottom:8px">
+          <input type="checkbox" id="chkPlaceBuildings" onchange="config.placeBuildings=this.checked;config.urbanEnabled=this.checked;const t=document.getElementById('togUrbanEnabled');if(t)t.className='toggle'+(this.checked?' on':'');if(this.checked&&config.buildingPreset==='none')config.buildingPreset='resort';const s=document.getElementById('cfgBuildingPreset');if(s)s.value=config.buildingPreset;renderPreview()">
+          Gerar edifícios no mapa
+        </label>
+
+        <label class="label">Estilo urbano</label>
+        <select id="cfgBuildingPreset" onchange="config.buildingPreset=this.value;config.placeBuildings=this.value!=='none';config.urbanEnabled=config.placeBuildings;if(this.value==='metropole')aplicarMetropole();if(this.value==='forest_horror')aplicarFloresta();syncUI();renderPreview()" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px">
+          <option value="none">Nenhum</option>
+          <option value="resort">🏖️ Resort de Luxo</option>
+          <option value="coastal_city">🏘️ Cidade Costeira</option>
+          <option value="mountain_village">🏔️ Vila de Montanha</option>
+          <option value="metropole">🌆 Metrópole 100% urbana</option>
+          <option value="forest_horror">🌲 Floresta com cabanas</option>
+        </select>
+
+        <label class="label" id="lblBuildingDensityUrban">Densidade urbana: 50%</label>
+        <input type="range" min="0.1" max="1.0" step="0.05" value="0.5" oninput="config.buildingDensity=+this.value;document.getElementById('lblBuildingDensityUrban').textContent='Densidade urbana: '+Math.round(this.value*100)+'%';renderPreview()" style="accent-color:var(--orange);width:100%">
+
+        <label class="label">Traçado das ruas</label>
+        <select id="cfgRoadStyle" onchange="config.roadStyle=this.value;renderPreview()" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px">
+          <option value="auto">Automático pelo preset</option>
+          <option value="coastal">Avenida costeira</option>
+          <option value="grid">Grid elegante</option>
+          <option value="organic">Orgânico</option>
+        </select>
+
+        <label class="label">Tamanho dos lotes</label>
+        <select id="cfgLotSize" onchange="config.lotSize=this.value;renderPreview()" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px">
+          <option value="compact">Compactos</option>
+          <option value="medium" selected>Médios</option>
+          <option value="large">Grandes / mansões</option>
+        </select>
+
+        <label class="label" id="lblPreserveNature">Preservar natureza: 55%</label>
+        <input type="range" min="0" max="1" step="0.05" value="0.55" oninput="config.preserveNature=+this.value;document.getElementById('lblPreserveNature').textContent='Preservar natureza: '+Math.round(this.value*100)+'%';renderPreview()" style="accent-color:var(--green);width:100%">
+
+        <label class="label" id="lblRoadWidth">Largura das ruas: 12 studs</label>
+        <input type="range" min="8" max="22" step="1" value="12" oninput="config.roadWidth=+this.value;document.getElementById('lblRoadWidth').textContent='Largura das ruas: '+this.value+' studs';renderPreview()" style="accent-color:var(--accent);width:100%">
+
+        <div id="blocoFloresta" style="display:none;border-left:2px solid #3fb950;padding-left:8px;margin:6px 0">
+          <label class="label" id="lblMata">Densidade da mata: fechada</label>
+          <input type="range" id="cfgMata" min="1" max="6" step="1" value="5" style="accent-color:#3fb950;width:100%"
+                 oninput="aplicarMata(+this.value)">
+          <div class="ai-status" id="hintMata" style="margin:2px 0 6px">~5.100 árvores, ~21 mil de peças no mapa de 1024.</div>
+          <label class="label" id="lblCabinCount">Cabanas: 3</label>
+          <input type="range" id="cfgCabinCount" min="0" max="12" step="1" value="3" style="accent-color:#3fb950;width:100%"
+                 oninput="config.cabinCount=+this.value;document.getElementById('lblCabinCount').textContent='Cabanas: '+this.value+(this.value==='0'?' (floresta intacta)':'');renderPreview()">
+          <label class="label" style="display:flex;align-items:center;gap:6px;margin-top:6px">
+            <input type="checkbox" id="cfgHorrorMood" checked onchange="config.horrorMood=this.checked">
+            🌑 Clima de terror (noite, neblina densa, penumbra)
+          </label>
+          <label class="label" style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="cfgTrails" onchange="config.trails=this.checked">
+            🥾 Trilhas de terra (em relevo acidentado ficam artificiais)
+          </label>
+          <div class="ai-status" style="margin:4px 0 0;color:#f0883e">A mata é plantada pelo <b>setup_world</b>. Se usar o par de scripts, rode o <b>nocity</b> antes do <b>city</b> — senão as cabanas nascem num campo pelado.</div>
+          <div class="ai-status" style="margin:4px 0 0">A densidade da mata vem do slider de Árvores. As cabanas ficam em clareiras afastadas; quanto mais fundo na mata, mais abandonada.</div>
+        </div>
+        <label class="label" id="lblUrbanRadius">Raio urbano: 260 studs</label>
+        <input type="range" min="140" max="480" step="20" value="260" oninput="config.urbanRadius=+this.value;document.getElementById('lblUrbanRadius').textContent='Raio urbano: '+this.value+' studs';renderPreview()" style="accent-color:var(--accent);width:100%">
+
+        <label class="label">Seed urbana</label>
+        <div style="display:flex;gap:6px">
+          <input type="number" id="cfgBuildingSeed2" value="31415" oninput="config.buildingSeed2=+this.value;renderPreview()" style="flex:1">
+          <button class="btn-dice" onclick="config.buildingSeed2=Math.floor(Math.random()*99999);document.getElementById('cfgBuildingSeed2').value=config.buildingSeed2;renderPreview()">🎲</button>
+        </div>
+
+        <div style="font-weight:700;color:#a86fd0;margin-top:12px">🧩 Modelos do Roblox (opcional)</div>
+        <div class="ai-status" style="margin:2px 0 6px">Cole o Asset ID de um modelo <b>público</b> do Creator Store para usá-lo no lugar da construção procedural. Deixe vazio para manter o modo atual. Scripts de terceiros são removidos automaticamente.</div>
+        <label class="label">Asset ID — Hotel</label>
+        <input type="text" id="cfgAssetHotel" placeholder="ex: 123456789" oninput="config.assetHotel=this.value" style="width:100%">
+        <label class="label">Asset ID — Casa</label>
+        <input type="text" id="cfgAssetHouse" placeholder="ex: 123456789" oninput="config.assetHouse=this.value" style="width:100%">
+        <label class="label">Asset ID — Restaurante</label>
+        <input type="text" id="cfgAssetRest" placeholder="ex: 123456789" oninput="config.assetRestaurant=this.value" style="width:100%">
+
+        <div class="ai-status" style="margin-top:8px">Ruas → lotes → fachadas → edifícios. O Resort de Luxo abre esta seção automaticamente.</div>
       </div>
     </div>
 
@@ -299,6 +379,39 @@ pre.code { background: var(--bg); border: 1px solid var(--border); border-radius
             <option value="medium" selected>Média</option>
             <option value="strong">Intensa</option>
           </select>
+
+          <details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg)">
+            <summary style="cursor:pointer;font-weight:700">🌿 Decoração do mapa</summary>
+            <div style="display:grid;gap:9px;margin-top:10px">
+              <label class="label">Preset de decoração</label>
+              <select onchange="applyDecorationPreset(this.value)" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px">
+                <option value="custom">Personalizado</option><option value="forest">Floresta densa</option><option value="tropical">Ilha tropical</option><option value="mountain">Montanha rochosa</option><option value="fields">Campos abertos</option><option value="sparse">Vegetação leve</option>
+              </select>
+              <label class="label">Seed da decoração</label>
+              <div style="display:flex;gap:6px"><input type="number" id="cfgDecorationSeed" value="7777" oninput="config.decorationSeed=+this.value" style="flex:1"><button class="btn-dice" onclick="config.decorationSeed=Math.floor(Math.random()*99999);document.getElementById('cfgDecorationSeed').value=config.decorationSeed">🎲</button></div>
+
+              <div style="font-weight:700;color:var(--green)">Árvores</div>
+              <label class="label">Tipo</label>
+              <select id="cfgTreeStyle" onchange="config.treeStyle=this.value" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px"><option value="mixed">Misto</option><option value="round">Copa redonda</option><option value="pine">Pinheiro</option><option value="palm">Palmeira</option></select>
+              <label class="label" id="lblTreeScale">Escala: 0.75–1.35</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input type="number" min="0.25" max="3" step="0.05" value="0.75" oninput="config.treeScaleMin=+this.value;updateDecorationLabels()"><input type="number" min="0.25" max="4" step="0.05" value="1.35" oninput="config.treeScaleMax=+this.value;updateDecorationLabels()"></div>
+              <label class="label" id="lblTreeShore">Distância da água: 14 studs</label><input type="range" min="0" max="60" step="2" value="14" oninput="config.treeShoreClearance=+this.value;updateDecorationLabels()">
+              <label class="label" id="lblTreeSlope">Terreno plano mínimo: 82%</label><input type="range" min="0.45" max="0.98" step="0.01" value="0.82" oninput="config.treeMinNormalY=+this.value;updateDecorationLabels()">
+              <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" checked onchange="config.treeClustered=this.checked"> Distribuir em grupos</label>
+
+              <div style="font-weight:700;color:var(--text2)">Pedras</div>
+              <label class="label">Tipo</label>
+              <select id="cfgRockStyle" onchange="config.rockStyle=this.value" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px"><option value="mixed">Misto</option><option value="boulder">Pedra única</option><option value="cluster">Formação em grupo</option></select>
+              <label class="label" id="lblRockScale">Escala: 0.65–1.45</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><input type="number" min="0.25" max="3" step="0.05" value="0.65" oninput="config.rockScaleMin=+this.value;updateDecorationLabels()"><input type="number" min="0.25" max="4" step="0.05" value="1.45" oninput="config.rockScaleMax=+this.value;updateDecorationLabels()"></div>
+              <label class="label" id="lblRockShore">Distância da água: 3 studs</label><input type="range" min="0" max="40" step="1" value="3" oninput="config.rockShoreClearance=+this.value;updateDecorationLabels()">
+              <label style="display:flex;gap:7px;align-items:center"><input type="checkbox" checked onchange="config.rockClustered=this.checked"> Distribuir em grupos</label>
+
+              <div style="font-weight:700;color:var(--accent)">Spawn</div>
+              <select id="cfgSpawnMode" onchange="config.spawnMode=this.value" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:7px"><option value="auto">Automático equilibrado</option><option value="center">Próximo ao centro</option><option value="highest">Ponto mais alto</option><option value="beach">Próximo da praia</option></select>
+
+            </div>
+          </details>
           <div class="ai-status" id="aiStatus">O modo Perlin continua disponível caso o serviço Beta esteja offline. O percentual de água segue o controle “Nível da água” acima.</div>
         </div>
       </div>
@@ -347,6 +460,23 @@ let config = {
   // Seeds individuais por feature (permite randomizar cada um separado)
   treeSeed: 7777, rockSeed: 8888, caveSeed: 9999, riverSeed: 333,
   generationMode: 'perlin', erosion: 'medium',
+  decorationSeed: 7777,
+  treeStyle: 'mixed', treeScaleMin: 0.75, treeScaleMax: 1.35,
+  treeClustered: true, treeClusterStrength: 0.55, treeShoreClearance: 14, treeMinNormalY: 0.82,
+  rockStyle: 'mixed', rockScaleMin: 0.65, rockScaleMax: 1.45,
+  rockClustered: true, rockClusterStrength: 0.60, rockShoreClearance: 3, rockMinNormalY: 0.58,
+  spawnMode: 'auto',
+  placeBuildings: false,
+  buildingPreset: 'none',
+  buildingDensity: 0.5,
+  buildingSeed2: 31415,
+  assetHotel: '', assetHouse: '', assetRestaurant: '', coastalShelf: 0,
+  cabinCount: 3, horrorMood: true, trails: false,
+  roadStyle: 'auto',
+  lotSize: 'medium',
+  preserveNature: 0.55,
+  roadWidth: 12,
+  urbanRadius: 260,
 };
 
 let generatedLua = '';
@@ -363,12 +493,16 @@ const PRESETS = {
   arctic:   { name:'❄️ Ártico', waterLevel:0.2, amplitude:0.65, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   desert:   { name:'🏜️ Deserto', waterLevel:0.05, amplitude:0.55, rivers:false, cavesEnabled:false, volcano:false, islandMode:false },
   skylands: { name:'🏔️ Skylands', waterLevel:0, amplitude:0.8, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, urbanEnabled:false },
-  city:     { name:'🏙️ Cidade', waterLevel:0, amplitude:0.08, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:false, placeRocks:false },
-  suburb:   { name:'🏘️ Subúrbio', waterLevel:0, amplitude:0.06, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, urbanEnabled:true, placeTrees:true, placeRocks:false },
+  city:     { name:'🏙️ Cidade', waterLevel:0.22, amplitude:0.16, octaves:3, scale:0.008, mountainThreshold:0.97, mountainAmplitude:0.0, erosion:'light', coastalShelf:1.0, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, placeTrees:true, placeRocks:false, treeDensity:0.004, spawnMode:'auto', urbanEnabled:true, placeBuildings:true, buildingPreset:'coastal_city', buildingDensity:1.0, roadStyle:'grid', lotSize:'compact', preserveNature:0, roadWidth:12, urbanRadius:480 },
+  suburb:   { name:'🏘️ Subúrbio', waterLevel:0.28, amplitude:0.20, octaves:4, scale:0.007, mountainThreshold:0.95, mountainAmplitude:0.05, erosion:'light', coastalShelf:0.95, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, placeTrees:true, placeRocks:false, treeDensity:0.012, spawnMode:'auto', urbanEnabled:true, placeBuildings:true, buildingPreset:'coastal_city', buildingDensity:0.8, roadStyle:'organic', lotSize:'medium', preserveNature:0.2, roadWidth:12, urbanRadius:420 },
   battleroyale: { name:'🔫 Battle Royale', waterLevel:0.15, amplitude:0.6, rivers:true, cavesEnabled:false, volcano:false, islandMode:true, placeTrees:true, placeRocks:true, urbanEnabled:false },
   rpg:      { name:'⚔️ RPG', waterLevel:0.2, amplitude:0.55, rivers:true, cavesEnabled:true, volcano:false, islandMode:false, placeTrees:true, placeRocks:true, urbanEnabled:false },
   obby:     { name:'🟩 Obby', waterLevel:0, amplitude:0.01, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:false, placeRocks:false, urbanEnabled:false },
   tycoon:   { name:'💰 Tycoon', waterLevel:0, amplitude:0.04, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:false, placeRocks:false, urbanEnabled:false },
+  resort:   { name:'🏖️ Resort de Luxo', waterLevel:0.25, amplitude:0.35, octaves:5, scale:0.006, mountainThreshold:0.75, mountainAmplitude:0.18, erosion:'light', coastalShelf:0.85, rivers:false, cavesEnabled:false, volcano:false, islandMode:true, placeTrees:true, placeRocks:true, treeDensity:0.014, rockDensity:0.003, spawnMode:'beach', urbanEnabled:true, placeBuildings:true, buildingPreset:'resort', buildingDensity:0.6, roadStyle:'coastal', lotSize:'large', preserveNature:0.62, roadWidth:12, urbanRadius:280 },
+  floresta: { name:'🌲 Floresta', waterLevel:0.02, amplitude:0.32, octaves:4, scale:0.007, mountainThreshold:0.80, mountainAmplitude:0.20, erosion:'light', coastalShelf:0.15, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:true, treeDensity:0.055, treeStyle:'pine', placeRocks:true, rockDensity:0.0015, spawnMode:'auto', urbanEnabled:false, placeBuildings:true, buildingPreset:'forest_horror', cabinCount:3, horrorMood:false, trails:false },
+  terror:   { name:'🌑 Terror na Mata', waterLevel:0, amplitude:0.34, octaves:4, scale:0.006, mountainThreshold:0.78, mountainAmplitude:0.24, erosion:'light', coastalShelf:0.10, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:true, treeDensity:0.075, treeStyle:'pine', placeRocks:true, rockDensity:0.0012, spawnMode:'auto', urbanEnabled:false, placeBuildings:true, buildingPreset:'forest_horror', cabinCount:1, horrorMood:true, trails:false },
+  metropole:{ name:'🌆 Metrópole', waterLevel:0, amplitude:0.01, octaves:3, scale:0.010, mountainThreshold:1.0, mountainAmplitude:0, erosion:'light', coastalShelf:0, rivers:false, cavesEnabled:false, volcano:false, islandMode:false, placeTrees:false, placeRocks:false, spawnMode:'center', urbanEnabled:true, placeBuildings:true, buildingPreset:'metropole', buildingDensity:1.0, roadStyle:'grid', lotSize:'compact', preserveNature:0, roadWidth:14, urbanRadius:480 },
   custom:   { name:'⚙️ Custom' },
 };
 
@@ -435,10 +569,97 @@ function selectPreset(key) {
     Object.assign(config, { waterLevel:p.waterLevel, amplitude:p.amplitude, rivers:p.rivers??false,
       cavesEnabled:p.cavesEnabled??false, volcano:p.volcano??false, islandMode:p.islandMode??false,
       urbanEnabled:p.urbanEnabled??false, placeTrees:p.placeTrees??true, placeRocks:p.placeRocks??true,
+      placeBuildings:p.placeBuildings??false, buildingPreset:p.buildingPreset??'none',
+      roadStyle:p.roadStyle??config.roadStyle, lotSize:p.lotSize??config.lotSize,
+      preserveNature:p.preserveNature??config.preserveNature, roadWidth:p.roadWidth??config.roadWidth,
+      urbanRadius:p.urbanRadius??config.urbanRadius,
+      octaves:p.octaves??config.octaves, scale:p.scale??config.scale,
+      mountainThreshold:p.mountainThreshold??config.mountainThreshold,
+      mountainAmplitude:p.mountainAmplitude??config.mountainAmplitude,
+      erosion:p.erosion??config.erosion,
+      treeDensity:p.treeDensity??config.treeDensity, rockDensity:p.rockDensity??config.rockDensity,
+      buildingDensity:p.buildingDensity??config.buildingDensity,
+      spawnMode:p.spawnMode??config.spawnMode,
+      coastalShelf:p.coastalShelf??0,
+      cabinCount:p.cabinCount??config.cabinCount,
+      horrorMood:p.horrorMood??false,
+      trails:p.trails??false,
+      treeStyle:p.treeStyle??config.treeStyle,
       lighting:key });
     syncUI();
   }
   renderPresets();
+  renderPreview();
+}
+
+// Mostra a versao da API ao lado da versao do HTML: se as duas nao baterem,
+// e quase sempre porque um dos dois nao foi substituido.
+(function(){
+  try {
+    fetch(HEIGHTMAP_API + '/health').then(r=>r.json()).then(d=>{
+      const e = document.getElementById('verApi');
+      if (e) {
+        e.textContent = d.version || '?';
+        e.style.color = (d.version === '1.2.0') ? '#3fb950' : '#f0883e';
+        if (d.version !== '0.9.2') e.title = 'A API esta em ' + d.version + ' e este HTML e da 1.2.0.';
+      }
+    }).catch(()=>{});
+  } catch(e) {}
+})();
+
+// Metropole: nao basta trocar o estilo urbano, o RELEVO tem que acompanhar.
+// Ilha com 22% de agua e mata continua sendo ilha por mais denso que seja o
+// loteamento. Aqui o terreno vira uma planicie continental seca.
+function aplicarMetropole() {
+  Object.assign(config, {
+    waterLevel: 0, amplitude: 0.01, octaves: 3, scale: 0.010,
+    mountainThreshold: 1.0, mountainAmplitude: 0, erosion: 'light',
+    coastalShelf: 0, islandMode: false, rivers: false, cavesEnabled: false,
+    volcano: false, placeTrees: false, placeRocks: false,
+    placeBuildings: true, urbanEnabled: true, buildingPreset: 'metropole',
+    buildingDensity: 1.0, roadStyle: 'grid', lotSize: 'compact',
+    preserveNature: 0, roadWidth: 14, urbanRadius: 480, spawnMode: 'center'
+  });
+}
+
+// Floresta: como na Metropole, trocar so o estilo urbano nao bastaria — o
+// relevo e a vegetacao e que fazem a floresta. Serra baixa, mata fechada,
+// pouca agua (um riacho ou lago aqui e ali), sem plato costeiro.
+function aplicarFloresta() {
+  Object.assign(config, {
+    waterLevel: 0.02, amplitude: 0.32, octaves: 4, scale: 0.007,
+    mountainThreshold: 0.80, mountainAmplitude: 0.20, erosion: 'light',
+    coastalShelf: 0.15, islandMode: false, rivers: false, cavesEnabled: false,
+    volcano: false, placeTrees: true, treeDensity: 0.055, treeStyle: 'pine',
+    placeRocks: true, rockDensity: 0.0015, spawnMode: 'auto',
+    placeBuildings: true, urbanEnabled: false, buildingPreset: 'forest_horror',
+    cabinCount: 3, horrorMood: true, trails: false
+  });
+}
+
+// Densidade da mata em passos legíveis. Os números de árvore vêm de medição
+// no simulador, num mapa de 1024 com relevo de floresta — servem de ordem de
+// grandeza, não de promessa exata (o terreno manda).
+const MATA_NIVEIS = [
+  { d: 0.010, nome: 'esparsa',      arv: '~1.200',  pc: '~5 mil' },
+  { d: 0.022, nome: 'aberta',       arv: '~1.900',  pc: '~8 mil' },
+  { d: 0.035, nome: 'média',        arv: '~2.700',  pc: '~11 mil' },
+  { d: 0.055, nome: 'densa',        arv: '~3.700',  pc: '~15 mil' },
+  { d: 0.075, nome: 'fechada',      arv: '~5.100',  pc: '~21 mil' },
+  { d: 0.100, nome: 'impenetrável', arv: '~9.000',  pc: '~37 mil' }
+];
+function aplicarMata(nivel) {
+  const n = MATA_NIVEIS[Math.max(0, Math.min(5, nivel - 1))];
+  config.treeDensity = n.d;
+  config.mataNivel = nivel;
+  const l = document.getElementById('lblMata');
+  if (l) l.textContent = 'Densidade da mata: ' + n.nome;
+  const h = document.getElementById('hintMata');
+  if (h) h.textContent = n.arv + ' árvores, ' + n.pc + ' de peças no mapa de 1024.'
+        + (nivel >= 6 ? ' Pesado — confira o FPS antes de publicar.' : '');
+  const td = document.getElementById('cfgTreeDensity'); if (td) td.value = n.d;
+  const tdl = document.getElementById('lblTreeDensity');
+  if (tdl) tdl.textContent = 'Densidade: ' + n.d.toFixed(3);
   renderPreview();
 }
 
@@ -457,6 +678,55 @@ function syncUI() {
     const el = document.getElementById(id);
     if(el) el.style.display = config[k] ? 'block' : 'none';
   });
+  // Sync building controls
+  const chkB = document.getElementById('chkPlaceBuildings'); if(chkB) chkB.checked = !!config.placeBuildings;
+  const selB = document.getElementById('cfgBuildingPreset'); if(selB) selB.value = config.buildingPreset || 'none';
+  const roadStyle = document.getElementById('cfgRoadStyle'); if(roadStyle) roadStyle.value = config.roadStyle || 'auto';
+  const lotSize = document.getElementById('cfgLotSize'); if(lotSize) lotSize.value = config.lotSize || 'medium';
+  const bSeed = document.getElementById('cfgBuildingSeed2'); if(bSeed) bSeed.value = config.buildingSeed2 ?? 31415;
+  const bdU = document.getElementById('lblBuildingDensityUrban'); if(bdU) bdU.textContent = 'Densidade urbana: '+Math.round((config.buildingDensity??0.5)*100)+'%';
+  const pn = document.getElementById('lblPreserveNature'); if(pn) pn.textContent = 'Preservar natureza: '+Math.round((config.preserveNature??0.55)*100)+'%';
+  const rw = document.getElementById('lblRoadWidth'); if(rw) rw.textContent = 'Largura das ruas: '+(config.roadWidth||12)+' studs';
+  const ur = document.getElementById('lblUrbanRadius'); if(ur) ur.textContent = 'Raio urbano: '+(config.urbanRadius||260)+' studs';
+  const sa = document.getElementById('cfgSemAgua');
+  if (sa) sa.checked = (config.waterLevel || 0) <= 0.005;
+  const wlIn = document.getElementById('cfgWaterLevel');
+  if (wlIn) wlIn.disabled = (config.waterLevel || 0) <= 0.005;
+  const bf = document.getElementById('blocoFloresta');
+  if (bf) bf.style.display = (config.buildingPreset === 'forest_horror') ? 'block' : 'none';
+  const mt = document.getElementById('cfgMata');
+  if (mt) {
+    let niv = config.mataNivel;
+    if (!niv) {
+      niv = 1;
+      for (let i = 0; i < MATA_NIVEIS.length; i++) {
+        if ((config.treeDensity || 0) >= MATA_NIVEIS[i].d - 0.004) niv = i + 1;
+      }
+    }
+    mt.value = niv;
+    const n = MATA_NIVEIS[niv - 1];
+    const l = document.getElementById('lblMata'); if (l) l.textContent = 'Densidade da mata: ' + n.nome;
+    const h = document.getElementById('hintMata'); if (h) h.textContent = n.arv + ' árvores, ' + n.pc + ' de peças no mapa de 1024.';
+  }
+  const cc = document.getElementById('cfgCabinCount');
+  if (cc) cc.value = config.cabinCount ?? 3;
+  const ccL = document.getElementById('lblCabinCount');
+  if (ccL) ccL.textContent = 'Cabanas: ' + (config.cabinCount ?? 3) + ((config.cabinCount === 0) ? ' (floresta intacta)' : '');
+  const hm = document.getElementById('cfgHorrorMood'); if (hm) hm.checked = config.horrorMood !== false;
+  const tr = document.getElementById('cfgTrails'); if (tr) tr.checked = config.trails === true;
+  const cs = document.getElementById('cfgCoastalShelf'); if(cs) cs.value = config.coastalShelf ?? 0;
+  const csL = document.getElementById('lblCoastalShelf'); if(csL) csL.textContent = 'Platô costeiro: '+Math.round((config.coastalShelf??0)*100)+'%';
+  const setS = (id, lbl, val, txt) => {
+    const e = document.getElementById(id); if(e) e.value = val;
+    const l = document.getElementById(lbl); if(l) l.textContent = txt;
+  };
+  setS('cfgOctaves','lblOctaves',config.octaves,'Octaves: '+config.octaves);
+  setS('cfgScale','lblScale',config.scale,'Escala: '+Number(config.scale).toFixed(3));
+  setS('cfgMountainThreshold','lblMountainThreshold',config.mountainThreshold,'Limiar: '+Number(config.mountainThreshold).toFixed(2));
+  setS('cfgMountainAmplitude','lblMountainAmplitude',config.mountainAmplitude,'Amplitude: '+Number(config.mountainAmplitude).toFixed(2));
+  setS('cfgTreeDensity','lblTreeDensity',config.treeDensity,'Densidade: '+Number(config.treeDensity).toFixed(3));
+  setS('cfgRockDensity','lblRockDensity',config.rockDensity,'Densidade: '+Number(config.rockDensity).toFixed(3));
+  const er = document.getElementById('cfgErosion'); if(er) er.value = config.erosion || 'medium';
 }
 
 function updateConfig(key, val) { config[key] = val; }
@@ -467,6 +737,30 @@ function setGenerationMode(mode) {
   const btn = document.getElementById('btnGenerate');
   btn.textContent = mode === 'erosion' ? '⛰️ GERAR HEIGHTMAP BETA' : '⚡ GERAR MAPA';
   if (currentTab === 'preview') showTab('preview');
+}
+function updateDecorationLabels() {
+  const t=document.getElementById('lblTreeScale'); if(t)t.textContent=`Escala: ${config.treeScaleMin.toFixed(2)}–${config.treeScaleMax.toFixed(2)}`;
+  const ts=document.getElementById('lblTreeShore'); if(ts)ts.textContent=`Distância da água: ${config.treeShoreClearance} studs`;
+  const sl=document.getElementById('lblTreeSlope'); if(sl)sl.textContent=`Terreno plano mínimo: ${(config.treeMinNormalY*100).toFixed(0)}%`;
+  const r=document.getElementById('lblRockScale'); if(r)r.textContent=`Escala: ${config.rockScaleMin.toFixed(2)}–${config.rockScaleMax.toFixed(2)}`;
+  const rs=document.getElementById('lblRockShore'); if(rs)rs.textContent=`Distância da água: ${config.rockShoreClearance} studs`;
+}
+function applyDecorationPreset(name) {
+  const presets={
+    forest:{treeDensity:0.055,rockDensity:0.003,treeStyle:'mixed',treeScaleMin:0.75,treeScaleMax:1.55,treeClustered:true,treeShoreClearance:12,treeMinNormalY:0.78,rockStyle:'cluster',spawnMode:'auto'},
+    tropical:{treeDensity:0.032,rockDensity:0.004,treeStyle:'palm',treeScaleMin:0.8,treeScaleMax:1.45,treeClustered:true,treeShoreClearance:7,treeMinNormalY:0.80,rockStyle:'mixed',spawnMode:'beach'},
+    mountain:{treeDensity:0.012,rockDensity:0.022,treeStyle:'pine',treeScaleMin:0.65,treeScaleMax:1.25,treeClustered:true,treeShoreClearance:15,treeMinNormalY:0.72,rockStyle:'cluster',rockScaleMin:0.85,rockScaleMax:1.9,spawnMode:'highest'},
+    fields:{treeDensity:0.010,rockDensity:0.002,treeStyle:'round',treeScaleMin:0.8,treeScaleMax:1.3,treeClustered:true,treeShoreClearance:18,treeMinNormalY:0.86,rockStyle:'boulder',spawnMode:'center'},
+    sparse:{treeDensity:0.006,rockDensity:0.004,treeStyle:'mixed',treeScaleMin:0.65,treeScaleMax:1.15,treeClustered:false,treeShoreClearance:12,treeMinNormalY:0.82,rockStyle:'mixed',spawnMode:'auto'}
+  };
+  if(name==='custom'||!presets[name])return;
+  Object.assign(config,presets[name]);
+  const ts=document.getElementById('cfgTreeStyle');if(ts)ts.value=config.treeStyle;
+  const rs=document.getElementById('cfgRockStyle');if(rs)rs.value=config.rockStyle;
+  const sm=document.getElementById('cfgSpawnMode');if(sm)sm.value=config.spawnMode;
+  document.getElementById('cfgTreeDensity').value=config.treeDensity; document.getElementById('lblTreeDensity').textContent='Densidade: '+config.treeDensity.toFixed(3);
+  document.getElementById('cfgRockDensity').value=config.rockDensity; document.getElementById('lblRockDensity').textContent='Densidade: '+config.rockDensity.toFixed(3);
+  updateDecorationLabels();
 }
 function absoluteHeightmapUrl(path) {
   if (!path) return '';
@@ -490,6 +784,10 @@ function updateSlider(key, el) {
 }
 function toggleFeature(key, btn) {
   config[key] = !config[key];
+  if (key === 'urbanEnabled') {
+    config.placeBuildings = config[key];
+    if (config.placeBuildings && config.buildingPreset === 'none') config.buildingPreset = 'resort';
+  }
   btn.className = 'toggle' + (config[key] ? ' on' : '');
   // Mostrar/esconder opções
   const optMap = { placeTrees:'treeOptions', placeRocks:'rockOptions', cavesEnabled:'caveOptions', urbanEnabled:'urbanOptions' };
@@ -528,6 +826,84 @@ function updateSizeStats() {
 
 // ═══ Canvas Preview ═══
 let render3DTimer = null;
+// ═══ Altura do preview procedural ═══
+// O servidor NORMALIZA o heightmap antes de aplicar o nivel d'agua — e por
+// isso que o resultado diz "agua pedida 30.0%, resultante 29.869%". O preview
+// nao normalizava: fazia h *= amplitude e comparava direto com waterLevel.
+// Com amplitude 0.16 e agua em 30%, o mapa inteiro ficava abaixo da linha
+// d'agua e o preview aparecia 100% azul, sem relacao com o mapa gerado.
+// Isso atingia justamente os presets urbanos, que sao de amplitude baixa.
+let previewScaleCache = { key: '', mn: 0, mx: 1 };
+function rawTerrainH(nx, ny, p1) {
+  const sx = nx*8, sy = ny*8;
+  let h = (p1.fbm(sx, sy, config.octaves, config.lacunarity, config.gain)+1)*0.5;
+  const ridge = p1.ridged(sx*0.5, sy*0.5, 4, config.lacunarity, config.gain);
+  if (ridge > config.mountainThreshold) h += (ridge - config.mountainThreshold) * config.mountainAmplitude;
+  h *= config.amplitude;
+  if (config.islandMode) {
+    const cx = nx-0.5, cy = ny-0.5;
+    h *= Math.max(0, 1 - Math.pow(Math.sqrt(cx*cx + cy*cy)*2, 1.5));
+  }
+  if (config.volcano && h > 0.75) {
+    const cx = nx-0.5, cy = ny-0.5;
+    if (Math.sqrt(cx*cx + cy*cy) < 0.08) h *= 0.4;
+  }
+  return h;
+}
+// So normalizar min-max nao basta: no modo ilha a queda das bordas joga muita
+// area para o zero e sobrava 63% de agua com 30% pedidos. O servidor CALIBRA
+// (calibrate_water_area) ate a fracao bater. Aqui a mesma ideia, por quantil:
+// acha o valor de altura que deixa exatamente waterLevel do mapa abaixo dele e
+// ancora esse valor na linha d'agua, com escala linear dos dois lados.
+function previewScale(p1) {
+  const key = [config.seed, config.octaves, config.lacunarity, config.gain, config.amplitude,
+               config.mountainThreshold, config.mountainAmplitude, config.islandMode,
+               config.volcano, config.waterLevel].join('|');
+  if (previewScaleCache.key === key) return previewScaleCache;
+  const N = 64, amostras = new Float64Array(N*N);
+  let mn = Infinity, mx = -Infinity, k = 0;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const h = rawTerrainH(i/(N-1), j/(N-1), p1);
+    amostras[k++] = h;
+    if (h < mn) mn = h;
+    if (h > mx) mx = h;
+  }
+  if (!(mx > mn)) { previewScaleCache = { key, mn: 0, mx: 1, wRaw: 0.5 }; return previewScaleCache; }
+  const wl = Math.max(0, Math.min(0.95, config.waterLevel || 0));
+  let wRaw = mn;
+  if (wl > 0) {
+    const ord = Array.from(amostras).sort((a, b) => a - b);
+    wRaw = ord[Math.min(ord.length - 1, Math.floor(wl * ord.length))];
+  }
+  if (wRaw <= mn) wRaw = mn + (mx - mn) * 1e-4;
+  if (wRaw >= mx) wRaw = mx - (mx - mn) * 1e-4;
+  previewScaleCache = { key, mn, mx, wRaw };
+  return previewScaleCache;
+}
+// Altura SO para escolher material. O servidor usa cortes por percentil
+// quando a terra e comprimida (senao um mapa plano viraria areia inteira);
+// aqui a mesma ideia: posicao relativa dentro da terra disponivel.
+function bandaTerrainH(nx, ny, p1) {
+  const s = previewScale(p1);
+  const wl = Math.max(0, Math.min(0.95, config.waterLevel || 0));
+  const h = rawTerrainH(nx, ny, p1);
+  if (h <= s.wRaw || s.mx <= s.wRaw) return wl;
+  return wl + (1 - wl) * (h - s.wRaw) / (s.mx - s.wRaw);
+}
+
+function normTerrainH(nx, ny, p1) {
+  // DESLOCA, nao estica. A versao anterior mapeava mn->0 e mx->1, o que
+  // esticava qualquer relevo ate a escala cheia: com o preset Metropole
+  // (amplitude 0.07, agua 0%) o preview 3D mostrava um terreno espetado que
+  // nao existe — o servidor entrega 0.00 a 0.07, ou seja 18 studs de desnivel
+  // num mapa de 1024. O servidor tambem nao estica: ele calibra a agua por
+  // deslocamento. Aqui a mesma coisa, e a fracao de agua continua exata
+  // porque wRaw e o quantil de waterLevel.
+  const s = previewScale(p1);
+  const wl = Math.max(0, Math.min(0.95, config.waterLevel || 0));
+  return Math.max(0, Math.min(1, rawTerrainH(nx, ny, p1) - s.wRaw + wl));
+}
+
 function renderPreview() {
   if(currentTab !== 'preview') return;
   if (is3D) {
@@ -544,13 +920,9 @@ function renderPreview() {
   const d = img.data;
   for(let py=0;py<H;py++) for(let px=0;px<W;px++) {
     const nx=px/W, ny=py/H, sx=nx*8, sy=ny*8;
-    let h=(p1.fbm(sx,sy,config.octaves,config.lacunarity,config.gain)+1)*0.5;
-    const ridge=p1.ridged(sx*0.5,sy*0.5,4,config.lacunarity,config.gain);
-    if(ridge>config.mountainThreshold) h+=(ridge-config.mountainThreshold)*config.mountainAmplitude;
-    h*=config.amplitude;
-    if(config.islandMode){const cx=nx-0.5,cy=ny-0.5;h*=Math.max(0,1-Math.pow(Math.sqrt(cx*cx+cy*cy)*2,1.5));}
-    if(config.volcano&&h>0.75){const cx=nx-0.5,cy=ny-0.5;if(Math.sqrt(cx*cx+cy*cy)<0.08) h*=0.4;}
-    h=Math.max(0,Math.min(1,h));
+    const h=normTerrainH(nx,ny,p1);
+    // hb so decide a COR: h decide se e agua e alimenta o relevo 3D
+    const hb=bandaTerrainH(nx,ny,p1);
     let r,g,b;
     const temp=(p2.noise(sx*0.3,sy*0.3)+1)*0.5;
     if(h<config.waterLevel){const dp=1-h/config.waterLevel;r=12-dp*8|0;g=84-dp*40|0;b=92+dp*30|0;}
@@ -565,10 +937,10 @@ function renderPreview() {
       const gn=(p2.noise(sx*0.4,sy*0.4)+1)*0.5;
       [r,g,b]=gn>0.55?MAT_COLORS.Grass:MAT_COLORS.LeafyGrass;
     }
-    else if(h<config.waterLevel+0.04)[r,g,b]=MAT_COLORS.Sand;
-    else if(h>0.88)[r,g,b]=MAT_COLORS.Snow;
-    else if(h>0.78){const t=(h-0.78)/0.1;[r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0);}
-    else if(h>0.68)[r,g,b]=MAT_COLORS.Rock;
+    else if(hb<config.waterLevel+0.04)[r,g,b]=MAT_COLORS.Sand;
+    else if(hb>0.88)[r,g,b]=MAT_COLORS.Snow;
+    else if(hb>0.78){const t=(hb-0.78)/0.1;[r,g,b]=MAT_COLORS.Rock.map((v,i)=>v+(MAT_COLORS.Snow[i]-v)*t|0);}
+    else if(hb>0.68)[r,g,b]=MAT_COLORS.Rock;
     else if(config.preset==='desert'){
       // Dunas com noise extra para variação
       const duneN = (p3.noise(sx*1.5, sy*1.5)+1)*0.5;
@@ -611,15 +983,7 @@ function renderPreview() {
   const p6 = new Perlin(config.seed + config.caveSeed);
 
   // Função helper pra calcular altura num ponto
-  function getH(px, py) {
-    const nx=px/W, ny=py/H, sx=nx*8, sy=ny*8;
-    let h=(p1.fbm(sx,sy,config.octaves,config.lacunarity,config.gain)+1)*0.5;
-    const ridge=p1.ridged(sx*0.5,sy*0.5,4,config.lacunarity,config.gain);
-    if(ridge>config.mountainThreshold) h+=(ridge-config.mountainThreshold)*config.mountainAmplitude;
-    h*=config.amplitude;
-    if(config.islandMode){const cx=nx-0.5,cy=ny-0.5;h*=Math.max(0,1-Math.pow(Math.sqrt(cx*cx+cy*cy)*2,1.5));}
-    return Math.max(0,Math.min(1,h));
-  }
+  function getH(px, py) { return normTerrainH(px/W, py/H, p1); }
 
   // 🌋 Vulcão — cratera com glow
   if (config.volcano) {
@@ -723,8 +1087,13 @@ function renderPreview() {
     }
   }
 
-  // 🏙️ Construções urbanas — grid de ruas + edifícios
-  if (config.urbanEnabled) {
+  // 🏙️ Malha urbana LEGADA (só Perlin, desenhada no proprio preview)
+  // Ela cobre o mapa inteiro com quarteiroes regulares e NAO corresponde a
+  // nada que seja gerado: e decoracao do preview antigo. Com o gerador de
+  // edificios ligado, as duas apareciam juntas na mesma imagem — a grelha
+  // falsa cobrindo tudo e o plano de verdade num canto, se contradizendo.
+  // Agora ela so aparece quando o gerador de edificios esta desligado.
+  if (config.urbanEnabled && !config.placeBuildings) {
     const pU = new Perlin(config.buildingSeed || 5555);
     const block = config.blockSize || 42;
     const sw = Math.max(3, Math.floor(block * 0.13));
@@ -860,9 +1229,183 @@ function renderPreview() {
   else if (config.preset==='rpg') drawRPGOverlay(ctx, W, H, getH);
   else if (config.preset==='obby') drawObbyOverlay(ctx, W, H);
   else if (config.preset==='tycoon') drawTycoonOverlay(ctx, W, H);
+
+  // ═══ Building Overlay ═══
+  if (config.placeBuildings && config.buildingPreset !== 'none') drawBuildingOverlay(ctx, W, H, getH);
 }
 
-// ═══ 🔫 Battle Royale Overlay ═══
+// ═══ 🏨 Erosion Preview Building Overlay ═══
+// ═══ Heightmap real do servidor ═══
+// O overlay antigo desenhava a cidade a partir de Perlin do NAVEGADOR: a
+// posicao dos icones nao tinha relacao com o heightmap erodido que o servidor
+// gerou e que o Lua realmente usa. Aqui o PNG e lido de verdade.
+// (O PNG e 16-bit; o canvas devolve 8-bit por canal, o que da 1 stud de
+// resolucao em 256 — suficiente para preview.)
+let erosionGrid = null;      // { n, data:Float32Array } alturas 0..1
+let erosion3DOn = false;
+
+function loadErosionGrid(url) {
+  return new Promise(resolve => {
+    if (erosionGrid && erosionGrid.url === url) return resolve(erosionGrid);
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => {
+      try {
+        const n = Math.min(im.width, 256);
+        const c = document.createElement('canvas');
+        c.width = n; c.height = n;
+        const cx = c.getContext('2d', { willReadFrequently: true });
+        cx.drawImage(im, 0, 0, n, n);
+        const px = cx.getImageData(0, 0, n, n).data;
+        const data = new Float32Array(n*n);
+        for (let i = 0; i < n*n; i++) data[i] = px[i*4] / 255;
+        erosionGrid = { n, data, url };
+      } catch (e) {
+        // canvas contaminado (CORS): segue sem o heightmap real
+        console.warn('heightmap sem CORS, usando aproximacao Perlin', e);
+        erosionGrid = null;
+      }
+      resolve(erosionGrid);
+    };
+    im.onerror = () => resolve(null);
+    im.src = url;
+  });
+}
+function gridSample(g, u, v) {           // u,v em 0..1
+  const n = g.n;
+  let x = Math.max(0, Math.min(n-1, u*(n-1)));
+  let y = Math.max(0, Math.min(n-1, v*(n-1)));
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const x1 = Math.min(x0+1, n-1), y1 = Math.min(y0+1, n-1);
+  const fx = x-x0, fy = y-y0;
+  const a = g.data[y0*n+x0], b = g.data[y0*n+x1];
+  const c = g.data[y1*n+x0], d = g.data[y1*n+x1];
+  return (a+(b-a)*fx) + ((c+(d-c)*fx) - (a+(b-a)*fx))*fy;
+}
+
+function drawErosionOverlay(img) {
+  if (!config.placeBuildings || config.buildingPreset === 'none') return;
+  const canvas = document.getElementById('erosionOverlayCanvas');
+  if (!canvas) return;
+  const W = 512, H = 512;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const desenhar = (getH) => { ctx.clearRect(0,0,W,H); drawBuildingOverlay(ctx, W, H, getH); };
+  // Aproximacao Perlin, so como reserva se o heightmap nao puder ser lido
+  const p1 = new Perlin(config.seed);
+  const perlinH = (px, py) => {
+    const nx = (px / W - 0.5) * 2, ny = (py / H - 0.5) * 2;
+    let h = p1.fbm(nx * 3, ny * 3, config.octaves || 6, config.lacunarity || 2, config.gain || 0.5) * (config.amplitude || 0.5);
+    if (config.islandMode) { const d = Math.sqrt(nx*nx + ny*ny) * 1.2; h -= d * d * 0.8; }
+    return h * 0.5 + 0.5;
+  };
+  if (generatedHeightmap && generatedHeightmap.files) {
+    loadErosionGrid(absoluteHeightmapUrl(generatedHeightmap.files.heightmap)).then(g => {
+      desenhar(g ? ((px,py) => gridSample(g, px/W, py/H)) : perlinH);
+    });
+  } else {
+    desenhar(perlinH);
+  }
+}
+
+// ═══ 🏨 Building Overlay ═══
+function drawBuildingOverlay(ctx, W, H, getH) {
+  const pB = new Perlin(config.buildingSeed2 || 31415);
+  ctx.save();
+  const water = config.waterLevel || 0;
+  const mapStuds = (SIZES[config.size] || SIZES.medium)[1];
+  const radiusPx = Math.max(60, Math.min(W*0.38, (config.urbanRadius||260)/mapStuds*W));
+  const roadWidthPx = Math.max(3, (config.roadWidth||12)/mapStuds*W);
+  const candidates = [];
+  for (let x=40;x<W-40;x+=24) for (let y=40;y<H-40;y+=24) {
+    const h=getH(x,y); if(h<=water) continue;
+    const hx1=getH(x+7,y), hx2=getH(x-7,y), hy1=getH(x,y+7), hy2=getH(x,y-7);
+    const variation=Math.max(h,hx1,hx2,hy1,hy2)-Math.min(h,hx1,hx2,hy1,hy2);
+    if(variation>0.095) continue;
+    let coast=false;
+    for(let a=0;a<12;a++){
+      const aa=a*Math.PI/6, tx=x+Math.cos(aa)*42, ty=y+Math.sin(aa)*42;
+      if(tx>0&&tx<W&&ty>0&&ty<H&&getH(tx,ty)<=water){coast=true;break;}
+    }
+    let score=(1-variation)*80+(coast?90:0)+(pB.noise(x*.01,y*.01)+1)*5;
+    if(config.buildingPreset==='mountain_village') score=(1-variation)*90+h*45;
+    candidates.push({x,y,h,coast,score});
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  if(!candidates.length){ctx.restore();return;}
+  const hub=candidates[0];
+
+  // Direção aproximada da água e avenida principal paralela à costa.
+  let waterDir={x:0,y:1}, best=-1;
+  for(let a=0;a<16;a++){
+    const aa=a*Math.PI/8, dx=Math.cos(aa), dy=Math.sin(aa); let score=0;
+    for(const d of [35,55,75]){
+      const tx=hub.x+dx*d, ty=hub.y+dy*d;
+      if(tx>=0&&tx<W&&ty>=0&&ty<H&&getH(tx,ty)<=water) score++;
+    }
+    if(score>best){best=score;waterDir={x:dx,y:dy};}
+  }
+  let dir={x:-waterDir.y,y:waterDir.x};
+  if((config.roadStyle||'auto')==='grid'){
+    const q=Math.floor(((pB.noise(hub.x*.02,hub.y*.02)+1)*.5)*4)%4;
+    const aa=q*Math.PI/4; dir={x:Math.cos(aa),y:Math.sin(aa)};
+  }
+  if((config.roadStyle||'auto')==='organic'){
+    const aa=((pB.noise(hub.x*.013,hub.y*.013)+1)*.5)*Math.PI*2; dir={x:Math.cos(aa),y:Math.sin(aa)};
+  }
+  const side={x:-dir.y,y:dir.x};
+  const mainHalf=radiusPx*.72;
+  const secondary=(config.lotSize==='compact'?[-.48,-.24,.24,.48]:config.lotSize==='large'?[-.46,.46]:[-.40,.40]).map(v=>v*radiusPx);
+
+  // Roads first.
+  ctx.lineCap='round';
+  ctx.strokeStyle='rgba(68,72,78,.88)'; ctx.lineWidth=roadWidthPx;
+  ctx.beginPath();ctx.moveTo(hub.x-dir.x*mainHalf,hub.y-dir.y*mainHalf);ctx.lineTo(hub.x+dir.x*mainHalf,hub.y+dir.y*mainHalf);ctx.stroke();
+  ctx.strokeStyle='rgba(205,200,190,.72)';ctx.lineWidth=Math.max(1,roadWidthPx+4);ctx.globalCompositeOperation='destination-over';
+  ctx.beginPath();ctx.moveTo(hub.x-dir.x*mainHalf,hub.y-dir.y*mainHalf);ctx.lineTo(hub.x+dir.x*mainHalf,hub.y+dir.y*mainHalf);ctx.stroke();
+  ctx.globalCompositeOperation='source-over';
+  for(const off of secondary){
+    const cx=hub.x+dir.x*off, cy=hub.y+dir.y*off, half=radiusPx*.40;
+    ctx.strokeStyle='rgba(78,80,84,.8)';ctx.lineWidth=Math.max(2,roadWidthPx*.82);
+    ctx.beginPath();ctx.moveTo(cx-side.x*half,cy-side.y*half);ctx.lineTo(cx+side.x*half,cy+side.y*half);ctx.stroke();
+  }
+
+  // Lots + oriented building icons.
+  const lotSpacing=(config.lotSize==='compact'?42:config.lotSize==='large'?72:56)/mapStuds*W;
+  const lotDepth=(config.lotSize==='compact'?34:config.lotSize==='large'?56:44)/mapStuds*W;
+  const lots=[];
+  const addLots=(cx,cy,tangent,half,kind)=>{
+    const right={x:-tangent.y,y:tangent.x}; let idx=0;
+    for(let d=-half+lotSpacing/2;d<=half-lotSpacing/2;d+=lotSpacing){
+      const rx=cx+tangent.x*d, ry=cy+tangent.y*d;
+      for(const ss of [-1,1]){
+        const lx=rx+right.x*ss*(roadWidthPx/2+5+lotDepth/2), ly=ry+right.y*ss*(roadWidthPx/2+5+lotDepth/2);
+        if(lx<18||lx>W-18||ly<18||ly>H-18||getH(lx,ly)<=water) continue;
+        lots.push({x:lx,y:ly,roadX:rx,roadY:ry,coast:Math.abs(getH(lx,ly)-water)<.16,kind,idx:idx++});
+      }
+    }
+  };
+  addLots(hub.x,hub.y,dir,mainHalf,'main');
+  for(const off of secondary){const cx=hub.x+dir.x*off,cy=hub.y+dir.y*off;addLots(cx,cy,side,radiusPx*.38,'secondary');}
+
+  ctx.strokeStyle='rgba(105,180,255,.18)';ctx.lineWidth=1;
+  for(const l of lots){ctx.strokeRect(l.x-lotDepth*.34,l.y-lotDepth*.27,lotDepth*.68,lotDepth*.54);}
+
+  // Plaza + hotel + restaurant + houses.
+  const drawIcon=(x,y,icon,bg,size=12)=>{ctx.fillStyle=bg;ctx.beginPath();ctx.arc(x,y,size*.62,0,Math.PI*2);ctx.fill();ctx.font=`${size}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(icon,x,y+1);};
+  drawIcon(hub.x,hub.y,'⛲','rgba(80,160,210,.9)',15);
+  const sorted=[...lots].sort((a,b)=>(b.coast?1:0)-(a.coast?1:0));
+  const hotel=sorted.find(l=>l.kind==='main')||sorted[0];
+  if(hotel) drawIcon(hotel.x,hotel.y,'🏨','rgba(210,165,50,.92)',17);
+  const rest=lots.slice().sort((a,b)=>Math.hypot(a.x-hub.x,a.y-hub.y)-Math.hypot(b.x-hub.x,b.y-hub.y)).find(l=>l!==hotel);
+  if(rest) drawIcon(rest.x,rest.y,'🍽️','rgba(200,85,65,.9)',13);
+  let houseMax=Math.max(2,Math.floor(lots.length*(config.buildingDensity||.5)*(1-(config.preserveNature??.55)*.55))), hc=0;
+  for(const l of lots){if(l===hotel||l===rest||hc>=houseMax)continue;if(pB.noise(l.x*.03,l.y*.03)>(config.preserveNature??.55)*.45-0.25){drawIcon(l.x,l.y,'🏠','rgba(238,232,215,.9)',10);hc++;}}
+
+  ctx.fillStyle='rgba(10,12,15,.74)';ctx.fillRect(8,H-42,244,30);ctx.fillStyle='#dbe8f5';ctx.font='11px sans-serif';ctx.textAlign='left';ctx.fillText(`Urban Planner • ${lots.length} lotes • ruas → lotes → edifícios`,16,H-23);
+  ctx.restore();
+}
+
 function drawBROverlay(ctx, W, H, getH) {
   const pBR = new Perlin(config.seed + 3333);
   const cx = W/2, cy = H/2;
@@ -1089,11 +1632,23 @@ function showTab(id) {
       const heightmapUrl = absoluteHeightmapUrl(generatedHeightmap.files.heightmap);
       const colormapUrl = absoluteHeightmapUrl(generatedHeightmap.files.colormap);
       const setupLuaUrl = absoluteHeightmapUrl(generatedHeightmap.files.setup_lua);
+      const regenerateDecorUrl = absoluteHeightmapUrl(generatedHeightmap.files.regenerate_decorations_lua);
+      const clearDecorUrl = absoluteHeightmapUrl(generatedHeightmap.files.clear_decorations_lua);
+      const testBuildingsUrl = generatedHeightmap.files.test_buildings_lua ? absoluteHeightmapUrl(generatedHeightmap.files.test_buildings_lua) : null;
       const packageUrl = absoluteHeightmapUrl(generatedHeightmap.files.package);
       const erosionNames = {light:'Leve',medium:'Média',strong:'Intensa',none:'Sem erosão'};
       body.innerHTML = `<div class="toolbar"><span>⛰️ Heightmap refinado · ${generatedHeightmap.seconds}s</span><button class="btn-copy" onclick="generatedHeightmap=null;showTab('preview')">↩ Voltar ao preview procedural</button></div>
         <div class="ai-result">
-          <img src="${previewUrl}" alt="Preview colorido do heightmap com erosão">
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <button class="btn-copy" id="btnEro2D" onclick="setErosionView(false)">2D</button>
+            <button class="btn-copy" id="btnEro3D" onclick="setErosionView(true)">3D</button>
+            <span class="ai-status" style="align-self:center">Relevo montado com o heightmap real, não com aproximação.</span>
+          </div>
+          <div id="erosionView2D" style="position:relative;display:inline-block;width:100%"><img id="erosionPreviewImg" src="${previewUrl}" style="width:100%;display:block" alt="Preview" onload="drawErosionOverlay(this)"><canvas id="erosionOverlayCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas></div>
+          <div id="erosionView3D" style="display:none;width:100%;height:520px;position:relative;background:#0a0e14;border-radius:8px;overflow:hidden">
+            <div id="canvas3DErosion" style="width:100%;height:100%"></div>
+            <div style="position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:#8b949e;pointer-events:none">Arrastar rotaciona · Scroll dá zoom · Botão direito move</div>
+          </div>
           <div class="ai-meta-grid">
             <div class="ai-meta-card">Seed<strong>${generatedHeightmap.terrain.seed}</strong></div>
             <div class="ai-meta-card">Erosão<strong>${erosionNames[generatedHeightmap.erosion] || generatedHeightmap.erosion}</strong></div>
@@ -1104,6 +1659,9 @@ function showTab(id) {
             <button class="btn-copy" onclick="downloadHeightmap('${heightmapUrl}','heightmap_${generatedHeightmap.id}.png')">⬇️ Heightmap 16-bit</button>
             <button class="btn-copy" onclick="downloadHeightmap('${colormapUrl}','colormap_${generatedHeightmap.id}.png')">🎨 Colormap</button>
             <button class="btn-copy" onclick="downloadHeightmap('${setupLuaUrl}','setup_world_${generatedHeightmap.id}.lua')">🌊 Script água + mundo</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${regenerateDecorUrl}','regenerate_decorations_${generatedHeightmap.id}.lua')">🌿 Regenerar decoração</button>
+            <button class="btn-copy" onclick="downloadHeightmap('${clearDecorUrl}','clear_decorations_${generatedHeightmap.id}.lua')">🧹 Limpar decoração</button>
+            ${testBuildingsUrl ? `<button class="btn-copy" style="background:#8e44ad;color:#fff;border-color:#8e44ad" onclick="downloadHeightmap('${testBuildingsUrl}','test_buildings_${generatedHeightmap.id}.lua')">🔬 DEBUG: testar construções</button>` : ''}
             <button class="btn-copy" onclick="downloadHeightmap('${packageUrl}','map_package_${generatedHeightmap.id}.zip')">📦 Pacote completo</button>
             <button class="btn-copy" onclick="window.open('${previewUrl}','_blank')">🔍 Abrir preview</button>
             <button class="btn-copy" onclick="generatedHeightmap=null;showTab('preview')">🗺️ Comparar com Perlin</button>
@@ -1117,7 +1675,8 @@ function showTab(id) {
               <li>Use o heightmap grayscale em <strong>Heightmap</strong> e o colormap em <strong>Colormap</strong>.</li>
               <li>Para ${generatedHeightmap.terrain.resolution}×${generatedHeightmap.terrain.resolution}, use X/Z = ${generatedHeightmap.terrain.resolution*4} studs e Y = 256 studs.</li>
               <li>Depois de importar, abra <strong>View → Command Bar</strong>, cole o arquivo <strong>setup_world.lua</strong> e execute fora do modo Play.</li>
-              <li>O script adiciona água sem apagar o relevo, cria spawn e decoração básica conforme as opções do mapa.</li>
+              <li>O script adiciona água sem apagar o relevo, cria spawn e decoração conforme as opções do mapa.</li>
+              <li>Para trocar apenas árvores, pedras ou spawn: altere os controles, gere novamente e execute <strong>regenerate_decorations.lua</strong>. Não precisa importar o terreno outra vez.</li>
             </ol>
           </details>
         </div>`;
@@ -1213,7 +1772,39 @@ async function generateMap() {
         place_trees: !!config.placeTrees,
         place_rocks: !!config.placeRocks,
         tree_density: Number(config.treeDensity || 0.02),
-        rock_density: Number(config.rockDensity || 0.005)
+        rock_density: Number(config.rockDensity || 0.005),
+        decoration_seed: Number(config.decorationSeed || 7777),
+        tree_style: config.treeStyle || 'mixed',
+        tree_scale_min: Number(config.treeScaleMin || 0.75),
+        tree_scale_max: Number(config.treeScaleMax || 1.35),
+        tree_clustered: !!config.treeClustered,
+        tree_cluster_strength: Number(config.treeClusterStrength || 0.55),
+        tree_shore_clearance: Number(config.treeShoreClearance || 14),
+        tree_min_normal_y: Number(config.treeMinNormalY || 0.82),
+        rock_style: config.rockStyle || 'mixed',
+        rock_scale_min: Number(config.rockScaleMin || 0.65),
+        rock_scale_max: Number(config.rockScaleMax || 1.45),
+        rock_clustered: !!config.rockClustered,
+        rock_cluster_strength: Number(config.rockClusterStrength || 0.60),
+        rock_shore_clearance: Number(config.rockShoreClearance || 3),
+        rock_min_normal_y: Number(config.rockMinNormalY || 0.58),
+        spawn_mode: config.spawnMode || 'auto',
+        place_buildings: !!config.placeBuildings,
+        building_preset: config.buildingPreset || 'none',
+        building_density: Number(config.buildingDensity || 0.5),
+        building_seed: Number(config.buildingSeed2 || 31415),
+        asset_hotel: (config.assetHotel || '').trim(),
+        asset_house: (config.assetHouse || '').trim(),
+        asset_restaurant: (config.assetRestaurant || '').trim(),
+        coastal_shelf: Number(config.coastalShelf || 0),
+        cabin_count: Number(config.cabinCount ?? 3),
+        horror_mood: !!config.horrorMood,
+        trails: config.trails === true,
+        road_style: config.roadStyle || 'auto',
+        lot_size: config.lotSize || 'medium',
+        preserve_nature: Number(config.preserveNature ?? 0.55),
+        road_width: Number(config.roadWidth || 12),
+        urban_radius: Number(config.urbanRadius || 260)
       };
       const res = await fetch(HEIGHTMAP_API + '/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -1465,21 +2056,105 @@ function reset3DCamera() {
   orbit.targetX = 0; orbit.targetY = 12; orbit.targetZ = 0;
 }
 
-function getTerrainHeight(nx, ny, p1) {
-  const sx = nx*8, sy = ny*8;
-  let h = (p1.fbm(sx, sy, config.octaves, config.lacunarity, config.gain)+1)*0.5;
-  const ridge = p1.ridged(sx*0.5, sy*0.5, 4, config.lacunarity, config.gain);
-  if (ridge > config.mountainThreshold) h += (ridge - config.mountainThreshold) * config.mountainAmplitude;
-  h *= config.amplitude;
-  if (config.islandMode) {
-    const cx = nx-0.5, cy = ny-0.5;
-    h *= Math.max(0, 1 - Math.pow(Math.sqrt(cx*cx + cy*cy)*2, 1.5));
-  }
-  if (config.volcano && h > 0.75) {
-    const cx = nx-0.5, cy = ny-0.5;
-    if (Math.sqrt(cx*cx + cy*cy) < 0.08) h *= 0.4;
-  }
-  return Math.max(0, Math.min(1, h));
+function getTerrainHeight(nx, ny, p1) { return normTerrainH(nx, ny, p1); }
+
+// ═══ 3D do heightmap gerado ═══
+// Diferente do render3DPreview (que reconstroi o relevo com Perlin no
+// navegador), este monta a malha a partir do PNG que o servidor devolveu e
+// pinta com o colormap. E o mesmo relevo que vai entrar no Studio.
+function setErosionView(tresD) {
+  erosion3DOn = !!tresD;
+  const v2 = document.getElementById('erosionView2D');
+  const v3 = document.getElementById('erosionView3D');
+  const b2 = document.getElementById('btnEro2D');
+  const b3 = document.getElementById('btnEro3D');
+  if (!v2 || !v3) return;
+  v2.style.display = erosion3DOn ? 'none' : 'inline-block';
+  v3.style.display = erosion3DOn ? 'block' : 'none';
+  if (b2) b2.style.background = erosion3DOn ? '' : 'var(--accent)';
+  if (b3) b3.style.background = erosion3DOn ? 'var(--accent)' : '';
+  if (erosion3DOn) renderErosion3D(); else cleanup3D();
+}
+
+function renderErosion3D() {
+  cleanup3D();
+  const container = document.getElementById('canvas3DErosion');
+  if (!container || !generatedHeightmap) return;
+  container.innerHTML = '<div style="padding:20px;color:#8b949e">Montando relevo...</div>';
+
+  loadErosionGrid(absoluteHeightmapUrl(generatedHeightmap.files.heightmap)).then(g => {
+    if (!erosion3DOn) return;
+    container.innerHTML = '';
+    if (!g) {
+      container.innerHTML = '<div style="padding:20px;color:#f0883e">Não foi possível ler o heightmap (CORS). Use o preview 2D.</div>';
+      return;
+    }
+    const width = container.clientWidth || 600, height = container.clientHeight || 520;
+    scene3D = new THREE.Scene();
+    scene3D.background = new THREE.Color(0x0a0e14);
+    camera3D = new THREE.PerspectiveCamera(50, width/height, 0.5, 3000);
+    renderer3D = new THREE.WebGLRenderer({ antialias: true });
+    renderer3D.setSize(width, height);
+    renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer3D.domElement);
+
+    scene3D.add(new THREE.AmbientLight(0x5a6a80, 0.65));
+    scene3D.add(new THREE.HemisphereLight(0x87ceeb, 0x3a3a28, 0.5));
+    const sun = new THREE.DirectionalLight(0xfff0d0, 1.05);
+    sun.position.set(120, 200, 90);
+    scene3D.add(sun);
+
+    // Proporcao real: 1024 studs de lado por 256 de altura importada
+    const mapStuds = (SIZES[config.size] || SIZES.medium)[1];
+    const WORLD = 260;
+    const ALT = WORLD * (config.importVerticalSize || 256) / mapStuds;
+    const seg = Math.min(g.n - 1, 190);
+    const geo = new THREE.PlaneGeometry(WORLD, WORLD, seg, seg);
+    geo.rotateX(-Math.PI/2);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const u = (pos.getX(i)/WORLD) + 0.5;
+      const v = (pos.getZ(i)/WORLD) + 0.5;
+      pos.setY(i, gridSample(g, u, v) * ALT);
+    }
+    geo.computeVertexNormals();
+
+    const tex = new THREE.TextureLoader();
+    tex.crossOrigin = 'anonymous';
+    const mapa = tex.load(absoluteHeightmapUrl(generatedHeightmap.files.colormap));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: mapa }));
+    scene3D.add(mesh);
+
+    // Lamina d'agua na mesma cota que o script Lua usa
+    // Sem agua no mapa nao se desenha lamina nenhuma. Antes ela ficava em
+    // y=0, no mesmo plano do terreno de um mapa plano, e as duas superficies
+    // disputavam o pixel — o preview aparecia preto e turquesa.
+    const wl = (generatedHeightmap.terrain && generatedHeightmap.terrain.water_level) || config.waterLevel || 0;
+    if (wl > 0.005) {
+      const wGeo = new THREE.PlaneGeometry(WORLD*1.6, WORLD*1.6);
+      wGeo.rotateX(-Math.PI/2);
+      const water = new THREE.Mesh(wGeo, new THREE.MeshLambertMaterial({
+        color: 0x14707e, transparent: true, opacity: 0.78 }));
+      water.position.y = wl * ALT;
+      scene3D.add(water);
+    }
+
+    orbit.theta = Math.PI*0.25; orbit.phi = Math.PI*0.28;
+    orbit.radius = WORLD*1.15; orbit.targetX = 0; orbit.targetZ = 0;
+    orbit.targetY = ALT*0.35;
+    init3DControls(renderer3D.domElement);
+    const loop = () => {
+      if (!renderer3D || !scene3D) return;
+      animFrame3D = requestAnimationFrame(loop);
+      camera3D.position.set(
+        orbit.targetX + orbit.radius*Math.cos(orbit.phi)*Math.cos(orbit.theta),
+        orbit.targetY + orbit.radius*Math.sin(orbit.phi),
+        orbit.targetZ + orbit.radius*Math.cos(orbit.phi)*Math.sin(orbit.theta));
+      camera3D.lookAt(orbit.targetX, orbit.targetY, orbit.targetZ);
+      renderer3D.render(scene3D, camera3D);
+    };
+    loop();
+  });
 }
 
 function render3DPreview() {
@@ -1734,8 +2409,8 @@ function render3DPreview() {
     }
   }
 
-  // ── Urban Buildings (3D) ──
-  if (config.urbanEnabled) {
+  // ── Malha urbana LEGADA em 3D — mesma razao do 2D ──
+  if (config.urbanEnabled && !config.placeBuildings) {
     const pU = new Perlin(config.buildingSeed || 5555);
     const block = config.blockSize || 42;
     const gridN = Math.ceil(512 / block);
